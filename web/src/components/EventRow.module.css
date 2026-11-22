@@ -1,0 +1,56 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 16px 20px;
+  background: var(--paper-light);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-m);
+}
+
+.time {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 86px;
+}
+
+.clock {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--ink-primary);
+}
+
+.date {
+  composes: text-meta from '../theme.css';
+}
+
+.info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  font-size: 17px;
+  color: var(--ink-primary);
+}
+
+.camera {
+  composes: text-meta from '../theme.css';
+  color: var(--accent-clay);
+}
+
+.state {
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  color: var(--stone);
+  flex-shrink: 0;
+}
+
+.active {
+  color: var(--accent-moss);
+}

@@ -1,0 +1,29 @@
+{
+  "name": "@home-ai-cctv/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Сервер управления камерами, авторизацией, событиями и API.",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --import tsx --test test/*.test.ts",
+    "db:generate": "drizzle-kit generate"
+  },
+  "dependencies": {
+    "argon2": "0.45.2",
+    "better-sqlite3": "13.2.0",
+    "drizzle-orm": "0.45.4",
+    "fastify": "5.12.8",
+    "onvif": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "22.8.7",
+    "drizzle-kit": "0.31.11",
+    "tsx": "4.23.15",
+    "typescript": "5.8.3"
+  }
+}

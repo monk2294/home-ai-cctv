@@ -1,0 +1,133 @@
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+.playerCol {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--accent-clay);
+  flex-shrink: 0;
+}
+
+.sectionTitle {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ink-primary);
+}
+
+.events {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.eventsHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sse {
+  composes: text-meta from '../theme.css';
+}
+
+.lastMotion {
+  composes: text-meta from '../theme.css';
+  margin: 0;
+}
+
+.eventList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.facts {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--paper-light);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-m);
+  padding: 18px;
+}
+
+.factList {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fact {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.fact dt {
+  color: var(--ink-muted);
+}
+
+.fact dd {
+  margin: 0;
+  color: var(--ink-primary);
+  text-align: right;
+}
+
+.lastError {
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: var(--radius-s);
+  background: var(--paper-light);
+  border: 1px solid var(--hairline);
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+.disabledBanner {
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: var(--radius-s);
+  background: var(--paper-light);
+  border: 1px solid var(--hairline);
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+
+.error {
+  color: #9c4a2f;
+}
+
+.loading {
+  composes: text-meta from '../theme.css';
+}

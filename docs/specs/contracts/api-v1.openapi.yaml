@@ -1,0 +1,1059 @@
+openapi: 3.0.3
+info:
+  title: home-ai-cctv API
+  version: 1.0.0
+  description: API локальной платформы для IP-камер. Cookie используется администратором, Bearer-токен — только ИИ-агентом. Timestamps используют RFC 3339 UTC. Каждый response содержит X-Request-ID; тело ошибки содержит тот же request_id.
+servers:
+  - url: /
+tags:
+  - name: Auth
+    description: Администраторские сессии и проверка доступа.
+  - name: Cameras
+    description: Добавление, настройка, диагностика и воспроизведение камер.
+  - name: PTZ
+    description: Continuous Move, Stop и пресеты.
+  - name: Events
+    description: История событий и SSE-поток.
+  - name: AI
+    description: JPEG и MJPEG для ИИ-агента.
+  - name: Health
+    description: Liveness и readiness.
+paths:
+  /api/v1/auth/session:
+    post:
+      tags: [Auth]
+      operationId: loginAdmin
+      summary: Создать администраторскую сессию
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Сессия создана. Session token передаётся только в Set-Cookie.
+          headers:
+            Set-Cookie:
+              description: HttpOnly session cookie.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSession'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          description: Слишком много попыток входа.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Auth]
+      operationId: logoutAdmin
+      summary: Завершить текущую сессию
+      security:
+        - cookieAuth: []
+      responses:
+        '204':
+          description: Сессия завершена.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/auth/verify:
+    get:
+      tags: [Auth]
+      operationId: verifyAdminSession
+      summary: Проверить администраторскую сессию для reverse proxy
+      description: Внутренний endpoint для Caddy forward_auth.
+      security:
+        - cookieAuth: []
+      responses:
+        '204':
+          description: Сессия действительна.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/cameras:
+    get:
+      tags: [Cameras]
+      operationId: listCameras
+      summary: Получить список камер
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Список всех камер, максимум четыре в MVP.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Camera'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Cameras]
+      operationId: createCamera
+      summary: Добавить камеру
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CameraCreate'
+      responses:
+        '201':
+          description: Камера сохранена, подключение продолжается в фоне.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Camera'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/UpstreamError'
+  /api/v1/cameras/probe:
+    post:
+      tags: [Cameras]
+      operationId: probeCamera
+      summary: Проверить камеру без сохранения
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProbeRequest'
+      responses:
+        '200':
+          description: Возможности и профили камеры. Частичные ошибки отражены в capabilities и diagnostics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/UpstreamError'
+  /api/v1/cameras/probe/snapshot.jpg:
+    post:
+      tags: [Cameras]
+      operationId: probeCameraSnapshot
+      summary: Получить временный снимок до сохранения камеры
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SnapshotWidth'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProbeSnapshotRequest'
+      responses:
+        '200':
+          description: Временный JPEG. Временный media stream удаляется после запроса.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        default:
+          $ref: '#/components/responses/UpstreamError'
+  /api/v1/cameras/{camera_id}:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+    get:
+      tags: [Cameras]
+      operationId: getCamera
+      summary: Получить камеру
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Публичная модель камеры.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Camera'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Cameras]
+      operationId: updateCamera
+      summary: Изменить камеру
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CameraUpdate'
+      responses:
+        '200':
+          description: Настройки сохранены. Переподключение запущено только при наличии соответствующих изменений у включённой камеры.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Camera'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/UpstreamError'
+    delete:
+      tags: [Cameras]
+      operationId: deleteCamera
+      summary: Удалить камеру и связанные ресурсы
+      security:
+        - cookieAuth: []
+      responses:
+        '204':
+          description: Камера удалена. Недоступные media resources поставлены в очередь очистки.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/cameras/{camera_id}/reconnect:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+    post:
+      tags: [Cameras]
+      operationId: reconnectCamera
+      summary: Перезапустить подключение камеры
+      description: Отменяет прежние задачи и запускает Reconciliation для одной включённой камеры.
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Камера переведена в connecting или уже имеет актуальное состояние после быстрого reconnect.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Camera'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/UpstreamError'
+  /api/v1/cameras/{camera_id}/snapshot.jpg:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+      - $ref: '#/components/parameters/SnapshotWidth'
+    get:
+      tags: [Cameras]
+      operationId: getCameraSnapshot
+      summary: Получить снимок для администратора
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Актуальный JPEG.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Камера отключена, код CAMERA_DISABLED.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          $ref: '#/components/responses/UpstreamError'
+  /api/v1/cameras/{camera_id}/playback:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+    get:
+      tags: [Cameras]
+      operationId: getCameraPlayback
+      summary: Получить относительные URL воспроизведения
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: URL платформы без RTSP и учётных данных.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaybackInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Камера отключена, код CAMERA_DISABLED.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          $ref: '#/components/responses/UpstreamError'
+  /api/v1/cameras/{camera_id}/ptz/move:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+    post:
+      tags: [PTZ]
+      operationId: moveCameraPtz
+      summary: Выполнить Continuous Move с ограниченным сроком
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PtzMoveRequest'
+      responses:
+        '204':
+          description: Команда принята камерой, автоматический Stop запланирован.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/UpstreamError'
+  /api/v1/cameras/{camera_id}/ptz/stop:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+    post:
+      tags: [PTZ]
+      operationId: stopCameraPtz
+      summary: Остановить движение PTZ
+      security:
+        - cookieAuth: []
+      responses:
+        '204':
+          description: Камера подтвердила Stop.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/UpstreamError'
+  /api/v1/cameras/{camera_id}/ptz/presets:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+    get:
+      tags: [PTZ]
+      operationId: listCameraPtzPresets
+      summary: Получить пресеты PTZ
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Список пресетов текущего профиля.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PtzPreset'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/UpstreamError'
+  /api/v1/cameras/{camera_id}/ptz/presets/{preset_token}/goto:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+      - $ref: '#/components/parameters/PresetToken'
+    post:
+      tags: [PTZ]
+      operationId: gotoCameraPtzPreset
+      summary: Перейти к пресету PTZ
+      security:
+        - cookieAuth: []
+      responses:
+        '204':
+          description: Камера приняла команду.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/UpstreamError'
+  /api/v1/cameras/{camera_id}/events:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 100
+    get:
+      tags: [Events]
+      operationId: listCameraEvents
+      summary: Получить последние события камеры
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: События в порядке убывания ID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/events:
+    get:
+      tags: [Events]
+      operationId: streamCameraEvents
+      summary: Получать новые события всех камер через SSE
+      description: Поле event содержит camera-event, id — ID события, data — JSON CameraEvent. Heartbeat отправляется не реже одного раза в 15 секунд.
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Server-Sent Events без буферизации.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/ai/cameras/{camera_id}/snapshot.jpg:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+      - $ref: '#/components/parameters/SnapshotWidth'
+    get:
+      tags: [AI]
+      operationId: getAiCameraSnapshot
+      summary: Получить JPEG для ИИ-агента
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: JPEG без звука.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Камера отключена, код CAMERA_DISABLED.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          $ref: '#/components/responses/UpstreamError'
+  /api/v1/ai/cameras/{camera_id}/stream.mjpeg:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+      - name: fps
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 5
+          default: 2
+      - name: width
+        in: query
+        schema:
+          type: integer
+          minimum: 64
+          maximum: 1280
+          default: 640
+    get:
+      tags: [AI]
+      operationId: streamAiCameraMjpeg
+      summary: Получить MJPEG для ИИ-агента
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Поток JPEG-кадров без звука и без буферизации proxy.
+          content:
+            multipart/x-mixed-replace:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Камера отключена (CAMERA_DISABLED) или уже имеет MJPEG consumer (AI_STREAM_LIMIT_REACHED).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          $ref: '#/components/responses/UpstreamError'
+  /api/v1/health/live:
+    get:
+      tags: [Health]
+      operationId: getLiveness
+      summary: Проверить HTTP-процесс
+      security: []
+      responses:
+        '200':
+          description: Процесс отвечает.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+  /api/v1/health/ready:
+    get:
+      tags: [Health]
+      operationId: getReadiness
+      summary: Проверить готовность сервера
+      description: Внутренний endpoint Docker healthcheck. Caddy возвращает 404 и не проксирует его.
+      x-internal: true
+      security: []
+      responses:
+        '200':
+          description: SQLite и миграции готовы. Компонент media может иметь отдельное состояние.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          description: SQLite или миграции не готовы.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: homecctv_session
+      description: Opaque HttpOnly session token администратора.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: token
+      description: Отдельный токен ИИ. Не является admin token.
+  parameters:
+    CameraId:
+      name: camera_id
+      in: path
+      required: true
+      description: UUIDv4, назначенный сервером.
+      schema:
+        type: string
+        format: uuid
+    PresetToken:
+      name: preset_token
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 256
+    SnapshotWidth:
+      name: width
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 64
+        maximum: 1920
+  responses:
+    BadRequest:
+      description: Некорректные параметры или значение выше лимита.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Нет действующей сессии или Bearer-токена.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: Токен не имеет нужного права.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Камера или пресет не найдены.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: Конфликт состояния, лимита, имени или возможности камеры.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    UpstreamError:
+      description: Ошибка ONVIF, камеры или go2rtc. Ответ очищен от секретов.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    Error:
+      type: object
+      required: [code, message, request_id]
+      properties:
+        code:
+          type: string
+          example: CAMERA_UNAVAILABLE
+        message:
+          type: string
+          example: Камера не отвечает на ONVIF-запрос.
+        request_id:
+          type: string
+          example: req_01J8M7F7N3P8F0N6W3F7N4N7Q9
+        details:
+          type: object
+          additionalProperties: true
+          description: Безопасные структурированные детали без upstream credentials.
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          enum: [admin]
+        password:
+          type: string
+          format: password
+          writeOnly: true
+          minLength: 1
+          maxLength: 1024
+    AuthSession:
+      type: object
+      required: [username, expires_at]
+      properties:
+        username:
+          type: string
+          enum: [admin]
+        expires_at:
+          type: string
+          format: date-time
+    CapabilityState:
+      type: string
+      enum: [supported, unsupported, unknown]
+    CameraState:
+      type: string
+      enum: [disabled, connecting, online, degraded, offline]
+      description: disabled означает пользовательское отключение, offline — техническую недоступность включённой камеры.
+    CameraCapabilities:
+      type: object
+      required: [video, audio, motion_events, ptz_continuous, ptz_presets]
+      properties:
+        video:
+          $ref: '#/components/schemas/CapabilityState'
+        audio:
+          $ref: '#/components/schemas/CapabilityState'
+        motion_events:
+          $ref: '#/components/schemas/CapabilityState'
+        ptz_continuous:
+          $ref: '#/components/schemas/CapabilityState'
+        ptz_presets:
+          $ref: '#/components/schemas/CapabilityState'
+    CameraError:
+      type: object
+      required: [code, message, occurred_at]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        occurred_at:
+          type: string
+          format: date-time
+    Camera:
+      type: object
+      required: [id, name, host, onvif_port, username, enabled, profile_token, has_rtsp_override, state, capabilities, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: UUIDv4, назначенный сервером.
+        name:
+          type: string
+        host:
+          type: string
+        onvif_port:
+          type: integer
+        username:
+          type: string
+        enabled:
+          type: boolean
+          description: false соответствует state=disabled и отсутствию активных подключений.
+        profile_token:
+          type: string
+        has_rtsp_override:
+          type: boolean
+        state:
+          $ref: '#/components/schemas/CameraState'
+        capabilities:
+          $ref: '#/components/schemas/CameraCapabilities'
+        last_error:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/CameraError'
+        last_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_event_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ProbeRequest:
+      type: object
+      required: [host, onvif_port, username, password]
+      properties:
+        host:
+          type: string
+          minLength: 1
+          maxLength: 253
+          example: 192.0.2.10
+        onvif_port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+          default: 80
+        username:
+          type: string
+          maxLength: 256
+        password:
+          type: string
+          format: password
+          writeOnly: true
+          maxLength: 1024
+        rtsp_url_override:
+          type: string
+          format: uri
+          maxLength: 2048
+          pattern: '^rtsp://'
+          writeOnly: true
+          nullable: true
+          description: Необязательный RTSP URL без userinfo. Username и password передаются отдельно. URL не возвращается API и не попадает в логи.
+    ProbeSnapshotRequest:
+      allOf:
+        - $ref: '#/components/schemas/ProbeRequest'
+        - type: object
+          required: [profile_token]
+          properties:
+            profile_token:
+              type: string
+              minLength: 1
+    CameraCreate:
+      allOf:
+        - $ref: '#/components/schemas/ProbeRequest'
+        - type: object
+          required: [name, profile_token]
+          properties:
+            name:
+              type: string
+              minLength: 1
+              maxLength: 100
+            profile_token:
+              type: string
+              minLength: 1
+            enabled:
+              type: boolean
+              default: true
+              description: false сохраняет камеру как disabled без media stream и ONVIF-подписок.
+    CameraUpdate:
+      type: object
+      minProperties: 1
+      description: Пустой password сохраняет прежний секрет. Отсутствие rtsp_url_override сохраняет прежний URL, строка заменяет его, clear_rtsp_override=true удаляет. null не разрешён. Одновременная передача URL и флага очистки запрещена. Изменение disabled камеры не запускает подключение.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        enabled:
+          type: boolean
+        host:
+          type: string
+          minLength: 1
+          maxLength: 253
+        onvif_port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        username:
+          type: string
+          maxLength: 256
+        password:
+          type: string
+          format: password
+          writeOnly: true
+          maxLength: 1024
+          description: Пустая строка сохраняет прежний пароль.
+        rtsp_url_override:
+          type: string
+          format: uri
+          maxLength: 2048
+          pattern: '^rtsp://'
+          writeOnly: true
+          description: RTSP URL без userinfo. Несовместим с clear_rtsp_override=true. null не разрешён.
+        clear_rtsp_override:
+          type: boolean
+          default: false
+          description: true удаляет сохранённый override после Update. Нельзя одновременно передать новый override.
+        profile_token:
+          type: string
+          minLength: 1
+    DeviceInfo:
+      type: object
+      properties:
+        manufacturer:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        firmware:
+          type: string
+          nullable: true
+    MediaProfile:
+      type: object
+      required: [token, name, video_codec, audio_codecs]
+      properties:
+        token:
+          type: string
+        name:
+          type: string
+        width:
+          type: integer
+          nullable: true
+        height:
+          type: integer
+          nullable: true
+        video_codec:
+          type: string
+          nullable: true
+        audio_codecs:
+          type: array
+          items:
+            type: string
+    ProbeDiagnostic:
+      type: object
+      required: [check, status, message]
+      properties:
+        check:
+          type: string
+          example: events
+        status:
+          type: string
+          enum: [ok, warning, error]
+        message:
+          type: string
+    ProbeResponse:
+      type: object
+      required: [device, capabilities, profiles, diagnostics]
+      properties:
+        device:
+          $ref: '#/components/schemas/DeviceInfo'
+        capabilities:
+          $ref: '#/components/schemas/CameraCapabilities'
+        profiles:
+          type: array
+          items:
+            $ref: '#/components/schemas/MediaProfile'
+        diagnostics:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProbeDiagnostic'
+    PtzMoveRequest:
+      type: object
+      required: [pan, tilt, zoom]
+      properties:
+        pan:
+          type: number
+          minimum: -1
+          maximum: 1
+        tilt:
+          type: number
+          minimum: -1
+          maximum: 1
+        zoom:
+          type: number
+          minimum: -1
+          maximum: 1
+        duration_ms:
+          type: integer
+          minimum: 100
+          maximum: 5000
+          default: 1000
+      description: Хотя бы одна скорость должна отличаться от нуля. Это правило проверяет сервер.
+    PtzPreset:
+      type: object
+      required: [token, name]
+      properties:
+        token:
+          type: string
+        name:
+          type: string
+    CameraEvent:
+      type: object
+      required: [id, camera_id, type, state, occurred_at, received_at, source, topic]
+      properties:
+        id:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+          description: Монотонно возрастающий SQLite AUTOINCREMENT ID, сериализованный как строка. Значения не переиспользуются.
+          example: '1024'
+        camera_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [motion]
+        state:
+          type: string
+          enum: [active, inactive]
+        occurred_at:
+          type: string
+          format: date-time
+        received_at:
+          type: string
+          format: date-time
+        source:
+          type: string
+          enum: [onvif]
+        topic:
+          type: string
+    EventList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CameraEvent'
+    WebRtcPlayback:
+      type: object
+      required: [signaling_url]
+      properties:
+        signaling_url:
+          type: string
+          example: /media/api/ws?src=cam_0123456789abcdef0123456789abcdef
+    HlsPlayback:
+      type: object
+      required: [playlist_url]
+      properties:
+        playlist_url:
+          type: string
+          example: /media/api/stream.m3u8?src=cam_0123456789abcdef0123456789abcdef&mp4
+    PlaybackInfo:
+      type: object
+      description: Хотя бы один режим не равен null. При двух доступных режимах preferred=webrtc. URL являются same-origin relative URLs.
+      required: [camera_id, preferred, webrtc, hls]
+      properties:
+        camera_id:
+          type: string
+          format: uuid
+        preferred:
+          type: string
+          enum: [webrtc, hls]
+        webrtc:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/WebRtcPlayback'
+        hls:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/HlsPlayback'
+    HealthStatus:
+      type: object
+      required: [status, components]
+      properties:
+        status:
+          type: string
+          enum: [ok, ready, degraded, not_ready]
+        components:
+          type: object
+          additionalProperties:
+            type: string
+            enum: [ok, degraded, unavailable]
+          example:
+            database: ok
+            migrations: ok
+            media: ok

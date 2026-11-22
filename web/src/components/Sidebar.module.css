@@ -1,0 +1,84 @@
+.sidebar {
+  width: 232px;
+  flex-shrink: 0;
+  background: var(--paper-light);
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 100%;
+}
+
+.top {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.brandRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.seal {
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  background: var(--accent-clay);
+}
+
+.brandName {
+  font-family: var(--font-display);
+  font-size: 27px;
+  font-weight: 600;
+  color: var(--ink-primary);
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: var(--radius-s);
+  font-size: 16px;
+  color: var(--ink-muted);
+}
+
+.navItem:hover {
+  background: var(--paper);
+  text-decoration: none;
+}
+
+.active {
+  color: var(--ink-primary);
+  background: var(--paper);
+}
+
+.logout {
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  padding: 8px 12px;
+  border-radius: var(--radius-s);
+  font-size: 14px;
+  color: var(--ink-muted);
+}
+
+.logout:hover {
+  background: var(--paper);
+  color: var(--ink-primary);
+}

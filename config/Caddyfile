@@ -1,0 +1,81 @@
+{
+	admin off
+	auto_https off
+}
+
+:8080 {
+	log {
+		format json
+		level INFO
+	}
+
+	# Тело JSON-запросов ограничено небольшим размером (спецификация 30, раздел 9).
+	request_body {
+		max_size 64KB
+	}
+
+	# Readiness не публикуется наружу (спецификация 30, раздел 3).
+	@ready path /api/v1/health/ready
+	handle @ready {
+		respond 404
+	}
+
+	@apiSession path /api/v1/auth/session*
+	handle @apiSession {
+		reverse_proxy server:8000
+	}
+
+	@apiLive path /api/v1/health/live*
+	handle @apiLive {
+		reverse_proxy server:8000
+	}
+
+	@api path /api/v1/*
+	handle @api {
+		reverse_proxy server:8000 {
+			# SSE и streaming без буферизации.
+			flush_interval -1
+		}
+	}
+
+	# Media endpoints: точечный allowlist, не весь /media/ (спецификация 30, раздел 3).
+	@mediaAuth {
+		path /media/api/ws*
+		path /media/api/webrtc*
+		path /media/api/stream.m3u8*
+		path /media/api/hls/playlist.m3u8*
+		path /media/api/hls/segment.ts*
+		path /media/api/hls/init.mp4*
+		path /media/api/hls/segment.m4s*
+	}
+	handle @mediaAuth {
+		forward_auth server:8000 {
+			uri /api/v1/auth/verify
+		}
+		reverse_proxy media:1984 {
+			flush_interval -1
+			# go2rtc ставит wildcard CORS на HLS; платформа работает same-origin.
+			header_down -Access-Control-Allow-Origin
+		}
+	}
+
+	# Остальные пути go2rtc (панель, /media/api/streams, config) не проксируются.
+	@mediaOther path /media/*
+	handle @mediaOther {
+		respond 404
+	}
+
+	# Всё остальное — статический SPA.
+	handle {
+		reverse_proxy web:80
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		X-Frame-Options DENY
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; script-src 'self'; worker-src 'self' blob:"
+		-Server
+	}
+}

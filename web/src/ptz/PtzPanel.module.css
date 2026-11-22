@@ -1,0 +1,119 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--paper-light);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-m);
+  padding: 18px;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ink-primary);
+}
+
+.diagnostic {
+  composes: text-meta from '../theme.css';
+  margin: 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 44px);
+  gap: 6px;
+  justify-content: center;
+}
+
+.padButton {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-s);
+  background: var(--paper);
+  touch-action: none;
+  user-select: none;
+}
+
+.padButton:hover:not(:disabled) {
+  background: var(--sand);
+}
+
+.padButton:active:not(:disabled) {
+  background: var(--hairline);
+}
+
+.stopButton {
+  background: var(--sand);
+}
+
+.zoomRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.zoomButton {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-s);
+  background: var(--paper);
+  touch-action: none;
+  user-select: none;
+}
+
+.zoomButton:hover:not(:disabled) {
+  background: var(--sand);
+}
+
+.zoomLabel {
+  composes: text-meta from '../theme.css';
+}
+
+.presets {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.presetsLabel {
+  composes: text-caps from '../theme.css';
+}
+
+.presetList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.presetButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-s);
+  background: var(--paper);
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.presetButton:hover:not(:disabled) {
+  background: var(--sand);
+}
+
+.error {
+  margin: 0;
+  font-size: 13px;
+  color: #9c4a2f;
+}

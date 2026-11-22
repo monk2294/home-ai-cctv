@@ -1,0 +1,118 @@
+name: home-ai-cctv
+
+x-restart: &restart
+  restart: unless-stopped
+
+# Ротация логов: конечный размер (спецификация 40, раздел 10).
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  proxy:
+    image: caddy:2.9.1
+    <<: [*restart, *logging]
+    ports:
+      - "8080:8080"
+    networks:
+      - edge
+      - backend
+    volumes:
+      - ./config/Caddyfile:/etc/caddy/Caddyfile:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    image: home-ai-cctv/web:0.1.0
+    <<: [*restart, *logging]
+    networks:
+      - edge
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    image: home-ai-cctv/server:0.1.0
+    <<: [*restart, *logging]
+    networks:
+      - backend
+    environment:
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8000
+      DATABASE_PATH: /data/home-ai-cctv.db
+      MEDIA_API_BASE_URL: http://media:1984
+      ADMIN_PASSWORD_FILE: /run/secrets/admin_password
+      AI_API_TOKEN_FILE: /run/secrets/ai_api_token
+      CAMERA_ENCRYPTION_KEY_FILE: /run/secrets/camera_encryption_key
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    secrets:
+      - admin_password
+      - ai_api_token
+      - camera_encryption_key
+    volumes:
+      - server-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8000/api/v1/health/ready').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  media:
+    image: ghcr.io/alexxit/go2rtc:1.9.9
+    <<: [*restart, *logging]
+    networks:
+      - backend
+    ports:
+      - "8555:8555/tcp"
+      - "8555:8555/udp"
+    environment:
+      WEBRTC_LAN_CANDIDATE: ${WEBRTC_LAN_CANDIDATE:-}
+    entrypoint: ["/bin/sh", "/go2rtc-entrypoint.sh"]
+    volumes:
+      # go2rtc дописывает streams в конфиг через PatchConfig (режим API-управления).
+      - ./config/go2rtc.yaml:/config/go2rtc.yaml
+      - ./config/go2rtc-entrypoint.sh:/go2rtc-entrypoint.sh:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:1984/media/api"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  edge:
+  backend:
+
+volumes:
+  server-data:
+
+# Файлы секретов создаёт scripts/init-secrets.sh (права 0600, без репозитория).
+secrets:
+  admin_password:
+    file: ./secrets/admin_password
+  ai_api_token:
+    file: ./secrets/ai_api_token
+  camera_encryption_key:
+    file: ./secrets/camera_encryption_key

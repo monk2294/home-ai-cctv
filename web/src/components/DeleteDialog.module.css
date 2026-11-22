@@ -1,0 +1,64 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(43, 41, 36, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 24px;
+}
+
+.dialog {
+  width: 460px;
+  max-width: 100%;
+  background: var(--paper-light);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-soft);
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--ink-primary);
+}
+
+.body {
+  margin: 0;
+  font-size: 15px;
+  line-height: 150%;
+  color: var(--ink-soft);
+}
+
+.input {
+  height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-s);
+  background: var(--paper);
+  color: var(--ink-primary);
+  font-size: 16px;
+  font-family: var(--font-body);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent-clay);
+}
+
+.error {
+  margin: 0;
+  font-size: 13px;
+  color: #9c4a2f;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}

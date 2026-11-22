@@ -1,0 +1,36 @@
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--stone);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--stone);
+}
+
+.online .dot {
+  background: var(--accent-moss);
+}
+
+.online {
+  color: var(--accent-moss);
+}
+
+.connecting .dot {
+  background: var(--accent-clay);
+}
+
+.degraded .dot {
+  background: var(--accent-clay);
+}
+
+.disabled {
+  color: var(--stone);
+}

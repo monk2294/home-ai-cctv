@@ -1,0 +1,167 @@
+.tile {
+  display: flex;
+  flex-direction: column;
+  background: var(--paper-light);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-m);
+  overflow: hidden;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease;
+}
+
+.tile:hover {
+  box-shadow: var(--shadow-soft);
+}
+
+.media {
+  position: relative;
+  aspect-ratio: 556 / 312;
+  background: var(--ink-primary);
+}
+
+.image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(160deg, #3a372f 0%, var(--ink-primary) 70%);
+}
+
+.badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 5px 10px;
+  border-radius: var(--radius-s);
+  background: rgba(43, 41, 36, 0.72);
+  color: var(--paper-light);
+  font-size: 12px;
+  letter-spacing: 2px;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 18px;
+  min-height: 74px;
+}
+
+.info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.name {
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--ink-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meta {
+  composes: text-meta from '../theme.css';
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.errorLine {
+  margin: 0;
+  font-size: 12px;
+  color: #9c4a2f;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 260px;
+}
+
+.motionBadge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 5px 10px;
+  border-radius: var(--radius-s);
+  background: rgba(105, 112, 95, 0.85);
+  color: var(--paper-light);
+  font-size: 12px;
+  letter-spacing: 1.5px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: var(--radius-s);
+  background: var(--paper);
+}
+
+.iconButton:hover {
+  background: var(--sand);
+}
+
+.deleteButton:hover {
+  background: var(--sand);
+}
+
+/* Плитка добавления */
+.addTile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 300px;
+  border: 1px dashed var(--stone);
+  border-radius: var(--radius-m);
+  background: var(--paper-light);
+  color: var(--ink-primary);
+  font-family: var(--font-body);
+}
+
+.addTile:hover {
+  border-color: var(--accent-clay);
+  background: var(--paper);
+}
+
+.addIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--paper);
+}
+
+.addTitle {
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 600;
+}
+
+.addMeta {
+  composes: text-meta from '../theme.css';
+}

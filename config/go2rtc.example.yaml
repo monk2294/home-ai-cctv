@@ -1,0 +1,23 @@
+# go2rtc слушает только внутреннюю Docker-сеть (спецификация 11, раздел 11).
+# Host публикует только 8555/tcp+udp для WebRTC media.
+# Базовый config без streams: рабочий config/go2rtc.yaml создаёт scripts/init-secrets.sh.
+# go2rtc дописывает streams с учётными данными камер в рабочий файл (права 0600, вне репозитория).
+
+api:
+  listen: ":1984"
+  # Внутренний и внешний HTTP API используют префикс /media/api/.
+  base_path: "/media"
+
+webrtc:
+  listen: ":8555"
+  # Контейнер отдаёт ICE-кандидатом адрес Docker-сети; браузеру он недоступен.
+  # Задайте LAN-адрес хоста с опубликованным портом 8555 (tcp+udp), иначе HLS fallback:
+  # candidates:
+  #   - 192.168.1.100:8555
+
+# RTSP-сервер go2rtc не используется: источники подключаются исходящими RTSP-клиентами.
+rtsp:
+  listen: ""
+
+log:
+  level: info
