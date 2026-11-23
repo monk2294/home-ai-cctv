@@ -86,12 +86,8 @@ function digestAuthorization(username: string, password: string, challenge: stri
   const opaque = authParam(challenge, 'opaque');
   const nc = '00000001';
   const cnonce = randomBytes(16).toString('hex');
-  // codeql[js/weak-cryptographic-algorithm]: Tapo принимает здесь только HTTP Digest MD5; другой algorithm не работает.
-  // codeql[js/insufficient-password-hash]: Это обязательный Digest derivation, а не хранение пароля.
   const ha1 = createHash('md5').update(`${username}:${realm}:${password}`).digest('hex');
-  // codeql[js/weak-cryptographic-algorithm]: MD5 обязателен для совместимости с Tapo Digest.
   const ha2 = createHash('md5').update('POST:/stream').digest('hex');
-  // codeql[js/weak-cryptographic-algorithm]: MD5 обязателен для совместимости с Tapo Digest.
   const response = createHash('md5').update(`${ha1}:${nonce}:${nc}:${cnonce}:${qop}:${ha2}`).digest('hex');
   let value =
     `Digest username="${username}", realm="${realm}", nonce="${nonce}", uri="/stream", ` +
