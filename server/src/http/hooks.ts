@@ -22,6 +22,11 @@ export function registerErrorHandler(app: FastifyInstance): void {
   app.setErrorHandler((error: FastifyError, request, reply) => {
     const requestId = request.requestId || resolveRequestId(undefined);
 
+    if (error.code === 'RATE_LIMIT_EXCEEDED') {
+      return reply
+        .status(429)
+        .send(errorBody(new ApiError(429, 'RATE_LIMIT_EXCEEDED', 'Слишком много запросов. Повторите позже.'), requestId));
+    }
     if (error instanceof AuthError) {
       return reply.status(error.statusCode).send(errorBody(error, requestId));
     }

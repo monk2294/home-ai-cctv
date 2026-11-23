@@ -80,6 +80,7 @@ config/
 | `DATABASE_PATH` | Путь SQLite внутри server-data |
 | `MAX_CAMERAS` | Положительный целый лимит камер, по умолчанию 4 |
 | `EVENT_RETENTION_PER_CAMERA` | Положительный целый лимит событий на камеру, по умолчанию 1000 |
+| `HTTP_RATE_LIMIT_PER_MINUTE` | Положительный целый лимит HTTP-запросов на IP в минуту, по умолчанию 1200 |
 | `MEDIA_API_BASE_URL` | Внутренний URL go2rtc |
 | `WEBRTC_LAN_CANDIDATE` | LAN IP сервера для WebRTC |
 | `WEBRTC_PUBLIC_CANDIDATE` | Внешний host:port при поддержке tunnel |

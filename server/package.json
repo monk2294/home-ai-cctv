@@ -1,6 +1,6 @@
 {
   "name": "@home-ai-cctv/server",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "description": "Сервер управления камерами, авторизацией, событиями и API.",
@@ -13,6 +13,7 @@
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
+    "@fastify/rate-limit": "11.3.0",
     "argon2": "0.45.2",
     "better-sqlite3": "13.2.0",
     "drizzle-orm": "0.45.4",

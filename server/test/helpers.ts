@@ -27,6 +27,7 @@ export async function buildTestApp(options?: {
   sessionCookieSecure?: boolean;
   mediaAvailable?: boolean;
   migrationsDone?: boolean;
+  rateLimitPerMinute?: number;
 }): Promise<TestContext> {
   const handle = createDb(':memory:');
   runMigrations(handle.db);
@@ -41,6 +42,7 @@ export async function buildTestApp(options?: {
     sessionCookieSecure: options?.sessionCookieSecure ?? false,
     logLevel: 'error',
     loggerEnabled: false,
+    rateLimitPerMinute: options?.rateLimitPerMinute,
     migrationsDone: () => migrationsDone,
     media: {
       checkAvailability: async () => (options?.mediaAvailable ?? true ? 'ok' : 'unavailable'),

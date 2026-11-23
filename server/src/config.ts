@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 
 export const DEFAULT_MAX_CAMERAS = 4;
 export const DEFAULT_EVENT_RETENTION_PER_CAMERA = 1000;
+export const DEFAULT_HTTP_RATE_LIMIT_PER_MINUTE = 1200;
 
 /** Значение конфигурации сервера. Все секреты читаются из файлов. */
 export interface Config {
@@ -10,6 +11,7 @@ export interface Config {
   databasePath: string;
   maxCameras: number;
   eventRetentionPerCamera: number;
+  httpRateLimitPerMinute: number;
   /** Содержимое файла ADMIN_PASSWORD_FILE. Только для первичного bootstrap. */
   adminBootstrapPassword: string;
   /** Содержимое файла AI_API_TOKEN_FILE. */
@@ -70,6 +72,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     'EVENT_RETENTION_PER_CAMERA',
     DEFAULT_EVENT_RETENTION_PER_CAMERA,
   );
+  const httpRateLimitPerMinute = readPositiveInteger(
+    env,
+    'HTTP_RATE_LIMIT_PER_MINUTE',
+    DEFAULT_HTTP_RATE_LIMIT_PER_MINUTE,
+  );
   const cameraEncryptionKeyB64 = readSecretFile(env, 'CAMERA_ENCRYPTION_KEY_FILE');
 
   return {
@@ -78,6 +85,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databasePath: env.DATABASE_PATH ?? '/data/home-ai-cctv.db',
     maxCameras,
     eventRetentionPerCamera,
+    httpRateLimitPerMinute,
     adminBootstrapPassword: readSecretFile(env, 'ADMIN_PASSWORD_FILE'),
     aiApiToken: readSecretFile(env, 'AI_API_TOKEN_FILE'),
     cameraEncryptionKeyB64,

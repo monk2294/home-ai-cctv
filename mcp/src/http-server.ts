@@ -26,7 +26,9 @@ function isAuthorized(request: IncomingMessage, token: string): boolean {
   if (!header.startsWith(prefix)) {
     return false;
   }
+  // codeql[js/insufficient-password-hash]: SHA-256 лишь выравнивает высокоэнтропийный Bearer для timing-safe comparison.
   const provided = createHash('sha256').update(header.slice(prefix.length)).digest();
+  // codeql[js/insufficient-password-hash]: Это не password hash; исходный token содержит не менее 256 бит энтропии.
   const expected = createHash('sha256').update(token).digest();
   return provided.length === expected.length && timingSafeEqual(provided, expected);
 }

@@ -64,6 +64,7 @@ async function main(): Promise<void> {
       aiApiToken: config.aiApiToken,
       sessionCookieSecure: config.sessionCookieSecure,
       logLevel: config.logLevel,
+      rateLimitPerMinute: config.httpRateLimitPerMinute,
       migrationsDone: () => migrationsDone,
       media: mediaChecker,
       cameras: { manager, ptz, events, sse, openMjpeg, audio: { capture: audioCapture, playback: audioPlayback } },

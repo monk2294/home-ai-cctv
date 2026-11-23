@@ -20,7 +20,7 @@
 1. Скачайте tag релиза:
 
    ```bash
-   git clone --branch v0.2.0 --depth 1 https://github.com/monk2294/home-ai-cctv.git
+   git clone --branch v0.2.1 --depth 1 https://github.com/monk2294/home-ai-cctv.git
    cd home-ai-cctv
    ```
 
@@ -35,7 +35,7 @@
 
    ```dotenv
    IMAGE_PREFIX=ghcr.io/monk2294/home-ai-cctv
-   IMAGE_TAG=0.2.0
+   IMAGE_TAG=0.2.1
    ```
 
 4. Скачайте и запустите versioned images:
@@ -96,7 +96,7 @@ npm run generate:api        # генерация TS-типов из OpenAPI-ко
 
 ## Эксплуатационные лимиты
 
-`.env` принимает `MAX_CAMERAS=4` и `EVENT_RETENTION_PER_CAMERA=1000`. Оба параметра требуют положительное целое число. Значения по умолчанию соответствуют проверенному профилю. После увеличения `MAX_CAMERAS` повторите нагрузочный тест `node scripts/load-test.mjs 60`.
+`.env` принимает `MAX_CAMERAS=4`, `EVENT_RETENTION_PER_CAMERA=1000` и `HTTP_RATE_LIMIT_PER_MINUTE=1200`. Все параметры требуют положительное целое число. Значения по умолчанию соответствуют проверенному профилю. После увеличения `MAX_CAMERAS` повторите нагрузочный тест `node scripts/load-test.mjs 60`.
 
 SQLite остаётся единственным backend. Текущее решение и границы PostgreSQL описаны в [docs/specs/70-open-source-readiness.md](docs/specs/70-open-source-readiness.md).
 
