@@ -4,6 +4,8 @@ node_modules
 **/dist
 data
 secrets
+backups
+config/go2rtc.yaml
 .env
 docs
 *.md

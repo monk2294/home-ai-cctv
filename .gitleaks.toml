@@ -1,0 +1,9 @@
+title = "home-ai-cctv"
+
+[allowlists]
+description = "Намеренно неверные и стандартные значения в сетевых проверках"
+regexTarget = "match"
+regexes = [
+  '''Authorization: Bearer wrong-token''',
+  '''Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==''',
+]

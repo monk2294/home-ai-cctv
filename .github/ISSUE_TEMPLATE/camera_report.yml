@@ -1,0 +1,56 @@
+name: Камера и совместимость
+description: Запросить поддержку камеры или сообщить результат проверки
+title: "[Camera]: "
+labels: [camera]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Не прикладывайте пароли, токены, cookies, RTSP URL с userinfo, внешние адреса и серийные номера.
+        Результат одной модели не подтверждает совместимость всей линейки производителя.
+  - type: input
+    id: model
+    attributes:
+      label: Производитель и точная модель
+      placeholder: TP-Link Tapo C520WS
+    validations:
+      required: true
+  - type: input
+    id: firmware
+    attributes:
+      label: Firmware
+    validations:
+      required: true
+  - type: input
+    id: app_version
+    attributes:
+      label: Версия home-ai-cctv
+    validations:
+      required: true
+  - type: textarea
+    id: capabilities
+    attributes:
+      label: ONVIF, видео, звук и PTZ
+      description: Укажите ONVIF port, профили, кодеки и известные capabilities без учётных данных.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Проверки на реальном устройстве
+      options:
+        - label: Probe и тестовый snapshot
+        - label: WebRTC
+        - label: HLS
+        - label: Motion events
+        - label: Continuous PTZ и Stop
+        - label: PTZ presets
+        - label: Audio input
+        - label: Audio output
+        - label: Reconnect после разрыва сети
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Очищенная диагностика и особенности модели
+      description: Приложите diagnostics из Probe и текст ошибок без секретов.
+      render: text

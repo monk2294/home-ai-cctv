@@ -62,7 +62,6 @@
 | `.github/dependabot.yml` | npm, Docker, Actions updates | YAML parse, GitHub Dependabot |
 | `.github/ISSUE_TEMPLATE/` | Bug, feature, camera reports | GitHub issue forms |
 | `CONTRIBUTING.md`, `SECURITY.md` | Правила и security reports | Review ссылок |
-| `scripts/check-openapi.sh` | Проверка generated types | Локальный запуск и CI |
 | `server/src/config.ts` | Новые limits и validation | Unit-тесты |
 | `server/src/cameras/` | Configurable camera limit | Unit-тесты |
 | `server/src/events/` | Configurable retention | Unit-тесты |
@@ -72,4 +71,5 @@
 
 ## Обновления
 
-- 2026-11-23 — Gitleaks 8.30.1 проверил пять исходных commits. Два finding относятся к тестовому Bearer `wrong-token` и стандартному WebSocket handshake key. Добавь точечные allowlist-правила и повтори scan.
+- 2026-11-23 — Gitleaks 8.30.1 проверил пять исходных commits. Два finding относятся к тестовому Bearer `wrong-token` и стандартному WebSocket handshake key. Точечные allowlist-правила устранили оба false positive; повторный scan не нашёл leaks.
+- 2026-11-23 — Проверка генерации нашла отсутствующий ответ 422 Probe в generated types. Commit `fix: sync generated OpenAPI types` устранил расхождение до запуска CI.

@@ -75,6 +75,8 @@ config/
 | `ADMIN_PASSWORD_FILE` | Пароль только для первичного bootstrap |
 | `AI_API_TOKEN_FILE` | Bearer-токен ИИ |
 | `CAMERA_ENCRYPTION_KEY_FILE` | Ключ секретов камер |
+| `IMAGE_PREFIX` | Compose prefix images: `home-ai-cctv` для build или `ghcr.io/monk2294/home-ai-cctv` для релиза |
+| `IMAGE_TAG` | Точная версия server, web и MCP images без `latest` |
 | `DATABASE_PATH` | Путь SQLite внутри server-data |
 | `MAX_CAMERAS` | Положительный целый лимит камер, по умолчанию 4 |
 | `EVENT_RETENTION_PER_CAMERA` | Положительный целый лимит событий на камеру, по умолчанию 1000 |
@@ -181,6 +183,17 @@ Downgrade SQLite на более старую версию приложения 
 7. После реализации этапа 2 проверить микрофон, audio playback, WAV для ИИ и отсутствие оставшихся FFmpeg-процессов.
 
 Обновление go2rtc требует повторной проверки HLS routes. Caddy allowlist нельзя расширять до всего API ради устранения ошибки маршрута.
+
+### Публикация релиза
+
+1. Слейте проверенный PR в `main`.
+2. Установите одну SemVer-версию в корневом и workspace `package.json` через `npm version <version> --workspaces --include-workspace-root --no-git-tag-version`.
+3. Обновите `IMAGE_TAG`, changelog и примеры README.
+4. Создайте и отправьте tag `v<version>`.
+5. Дождитесь workflow `Release`: он повторяет проверки и публикует server, web и MCP в GHCR.
+6. Проверьте GitHub Release и установку через `docker compose up -d --no-build`.
+
+Workflow отклоняет tag, если хотя бы один `package.json` содержит другую версию. `latest` не публикуется. Первая публикация GHCR package может потребовать ручного переключения package visibility в Public.
 
 ## 10. Логи и диагностика
 

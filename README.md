@@ -9,11 +9,45 @@
 |---|---|
 | `server/` | Node.js 22 + Fastify + SQLite (Drizzle). Авторизация, API v1, звук (WAV-захват для ИИ, воспроизведение файлов). |
 | `web/` | React + Vite + TypeScript. Веб-клиент администратора: просмотр, PTZ, события, push-to-talk, polling снимков, мобильная раскладка. |
-| `config/` | Caddyfile и go2rtc.yaml для Docker Compose. |
+| `config/` | Caddyfile и go2rtc.example.yaml для Docker Compose. |
 | `scripts/` | Создание файлов секретов. |
 | `docs/` | Спецификации и OpenAPI-контракт. |
 
-## Первичный запуск (Docker Compose)
+## Запуск готового релиза
+
+Требования: Docker с Compose plugin.
+
+1. Скачайте tag релиза:
+
+   ```bash
+   git clone --branch v0.2.0 --depth 1 https://github.com/monk2294/home-ai-cctv.git
+   cd home-ai-cctv
+   ```
+
+2. Создайте секреты и скопируйте конфигурацию:
+
+   ```bash
+   ./scripts/init-secrets.sh
+   cp .env.example .env
+   ```
+
+3. Установите в `.env`:
+
+   ```dotenv
+   IMAGE_PREFIX=ghcr.io/monk2294/home-ai-cctv
+   IMAGE_TAG=0.2.0
+   ```
+
+4. Скачайте и запустите versioned images:
+
+   ```bash
+   docker compose pull
+   docker compose up -d --no-build
+   ```
+
+5. Проверьте healthcheck-и и войдите по инструкции ниже.
+
+## Первичный запуск из исходников (Docker Compose)
 
 Требования: Docker с Compose plugin, Node.js 22.16.0 (для локальной разработки).
 
@@ -60,6 +94,12 @@ npm run generate:api        # генерация TS-типов из OpenAPI-ко
 
 Миграции БД: `npm run db:generate --workspace server` (SQL появляется в `server/drizzle/`). Сервер применяет их автоматически перед стартом HTTP.
 
+## Эксплуатационные лимиты
+
+`.env` принимает `MAX_CAMERAS=4` и `EVENT_RETENTION_PER_CAMERA=1000`. Оба параметра требуют положительное целое число. Значения по умолчанию соответствуют проверенному профилю. После увеличения `MAX_CAMERAS` повторите нагрузочный тест `node scripts/load-test.mjs 60`.
+
+SQLite остаётся единственным backend. Текущее решение и границы PostgreSQL описаны в [docs/specs/70-open-source-readiness.md](docs/specs/70-open-source-readiness.md).
+
 ## Backup и restore
 
 ```bash
@@ -96,6 +136,13 @@ opentunnel route add 8080 --name cctv   # печатает https://cctv.<id>.ope
 ```
 
 Для Secure cookie задайте `SESSION_COOKIE_SECURE=true` в `.env` и перезапустите server; вход выполняйте по HTTPS-URL туннеля. URL туннеля не является аутентификацией: доступ к платформе всё равно требует пароль администратора.
+
+## Участие и безопасность
+
+- Правила разработки и проверки — [CONTRIBUTING.md](CONTRIBUTING.md).
+- Приватное сообщение об уязвимости — [SECURITY.md](SECURITY.md).
+- Разработка адаптеров камер — [docs/camera-adapters.md](docs/camera-adapters.md).
+- Изменения релизов — [CHANGELOG.md](CHANGELOG.md).
 
 ## Лицензия
 

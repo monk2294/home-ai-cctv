@@ -1,0 +1,31 @@
+name: Предложение
+description: Предложить функцию или изменение архитектуры
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Какую задачу решает предложение
+      description: Опишите сценарий пользователя, а не только выбранную технологию.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Предлагаемое поведение
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Рассмотренные альтернативы
+  - type: checkboxes
+    id: impact
+    attributes:
+      label: Затронутые контракты
+      options:
+        - label: Изменяется публичный HTTP API
+        - label: Изменяется MCP API
+        - label: Изменяется схема БД или миграции
+        - label: Изменяется развёртывание или модель безопасности

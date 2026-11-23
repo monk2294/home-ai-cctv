@@ -1,0 +1,49 @@
+name: Ошибка
+description: Сообщить о воспроизводимой ошибке
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Что произошло
+      description: Опишите фактический и ожидаемый результат.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Версия приложения
+      placeholder: 0.2.0 или commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Компонент
+      options:
+        - server
+        - web
+        - mcp
+        - media / go2rtc
+        - deployment
+        - documentation
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Шаги воспроизведения
+      description: Дайте минимальную последовательность действий.
+      placeholder: |
+        1. Запустите ...
+        2. Откройте ...
+        3. Наблюдайте ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Диагностика
+      description: Удалите пароли, токены, cookies, RTSP userinfo, внешние URL и серийные номера.
+      render: text
