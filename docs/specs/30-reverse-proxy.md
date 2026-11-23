@@ -1,6 +1,6 @@
 # 30. Reverse proxy и OpenTunnel
 
-Связанные требования: FR-03, FR-06, FR-08, FR-09, FR-12, FR-13, NFR-08, NFR-09.
+Связанные требования: FR-03, FR-06, FR-08, FR-09, FR-12, FR-13, NFR-08, NFR-09, S2-FR-02–S2-FR-07. Правила audio upload и микрофона этапа 2 — в `50-stage-2.md`.
 
 ## 1. Назначение
 
@@ -117,11 +117,11 @@ GET http://server:8000/api/v1/auth/verify
 X-Content-Type-Options: nosniff
 Referrer-Policy: no-referrer
 X-Frame-Options: DENY
-Permissions-Policy: camera=(), microphone=(), geolocation=()
+Permissions-Policy: camera=(), microphone=(self), geolocation=()
 Content-Security-Policy: ...
 ```
 
-CSP должен разрешать только необходимые ресурсы своего origin и используемые media/worker blob URL. Нельзя без необходимости добавлять `unsafe-eval`.
+CSP должен разрешать только необходимые ресурсы своего origin и используемые media/worker blob URL. Нельзя без необходимости добавлять `unsafe-eval`. В MVP microphone остаётся запрещён; этап 2 разрешает `microphone=(self)` для push-to-talk.
 
 Дополнительно:
 
@@ -151,6 +151,7 @@ CSP должен разрешать только необходимые ресу
 8. Одновременную работу HLS и API.
 9. Отсутствие смены cookie attributes tunnel-ом.
 10. Поведение после reconnect tunnel.
+11. В этапе 2 — файловый playback и WAV для ИИ через HTTPS. Микрофон проверяется только при рабочем WebRTC media; иначе фиксируется `UNSUPPORTED_BY_TUNNEL`.
 
 ### 8.3 WebRTC
 
@@ -159,7 +160,8 @@ CSP должен разрешать только необходимые ресу
 - WebRTC signaling может работать;
 - WebRTC media через tunnel не гарантируется;
 - HLS является обязательным удалённым режимом;
-- документация не должна обещать удалённый WebRTC.
+- документация не должна обещать удалённый WebRTC;
+- этап 2 не обещает удалённый микрофон через этот tunnel. Файловый playback и WAV для ИИ используют HTTPS и проверяются отдельно.
 
 Если tunnel поддерживает отдельные TCP/UDP mappings:
 
@@ -176,7 +178,8 @@ TURN используется как отдельное решение, если
 - Login и ONVIF proxy не ждут бесконечно.
 - Streaming endpoints не используют короткий общий request timeout.
 - Request body для JSON ограничен небольшим значением, достаточным для RTSP URL и форм.
-- Нельзя принимать файлы upload в MVP.
+- Нельзя принимать файлы upload в MVP. В этапе 2 только admin и AI `audio/play` принимают WAV/MP3 до 5 МиБ. Остальные routes сохраняют 64 КиБ.
+- Внутренний audio resource server не проксируется через Caddy.
 - Число одновременных соединений ограничивается ресурсами сервера и лимитами NFR-01.
 - Slowloris-защита не должна разрывать установленный SSE, MJPEG или WebSocket.
 

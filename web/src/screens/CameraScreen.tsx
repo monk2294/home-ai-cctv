@@ -14,6 +14,7 @@ import { useEvents } from '../events/EventsContext';
 import { useCameraEvents } from '../hooks/useCameraEvents';
 import { VideoPlayer } from '../player/VideoPlayer';
 import { PtzPanel } from '../ptz/PtzPanel';
+import { AudioPanel } from '../audio/AudioPanel';
 import styles from './CameraScreen.module.css';
 
 const SSE_LABELS = {
@@ -167,6 +168,7 @@ export function CameraScreen() {
         </div>
         <div className={styles.side}>
           <PtzPanel camera={camera} />
+          <AudioPanel camera={camera} />
           <section className={styles.facts} aria-label="Сведения о камере">
             <h3 className={styles.sectionTitle}>Сведения</h3>
             <dl className={styles.factList}>
@@ -183,6 +185,10 @@ export function CameraScreen() {
               <div className={styles.fact}>
                 <dt>Звук</dt>
                 <dd>{capabilityLabel(camera.capabilities.audio)}</dd>
+              </div>
+              <div className={styles.fact}>
+                <dt>Динамик</dt>
+                <dd>{capabilityLabel(camera.capabilities.audio_output)}</dd>
               </div>
               <div className={styles.fact}>
                 <dt>Движение</dt>

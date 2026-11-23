@@ -1,0 +1,98 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--paper-light);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-m);
+  padding: 18px;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ink-primary);
+  margin: 0;
+}
+
+.hint {
+  composes: text-meta from '../theme.css';
+  margin: 0;
+}
+
+.micButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 44px;
+  border: none;
+  border-radius: var(--radius-s);
+  background: var(--accent-clay);
+  color: var(--paper-light);
+  font-size: 14px;
+  touch-action: none;
+  user-select: none;
+}
+
+.micButton:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.micButton:disabled {
+  opacity: 0.5;
+}
+
+.micRecording {
+  background: #9c4a2f;
+}
+
+.fileButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-s);
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 6px 12px;
+}
+
+.fileButton:hover {
+  background: var(--sand);
+}
+
+.fileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.playing {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+
+.stopButton {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-s);
+  background: var(--sand);
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.error {
+  margin: 0;
+  font-size: 13px;
+  color: #9c4a2f;
+}

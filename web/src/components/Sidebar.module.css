@@ -82,3 +82,40 @@
   background: var(--paper);
   color: var(--ink-primary);
 }
+
+@media (max-width: 720px) {
+  .sidebar {
+    width: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 14px;
+    min-height: 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .top {
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .brandName {
+    font-size: 20px;
+  }
+
+  .nav {
+    flex-direction: row;
+    gap: 4px;
+  }
+
+  .navItem {
+    height: 36px;
+    padding: 0 10px;
+    font-size: 14px;
+  }
+
+  .logout {
+    margin-left: auto;
+  }
+}

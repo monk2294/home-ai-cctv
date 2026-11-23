@@ -13,6 +13,8 @@ export interface Config {
   cameraEncryptionKeyB64: string;
   sessionCookieSecure: boolean;
   mediaApiBaseUrl: string;
+  /** Внутренний base URL этого сервера для выдачи аудио контейнеру media. */
+  audioInternalBaseUrl: string;
   logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
 
@@ -58,6 +60,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     cameraEncryptionKeyB64,
     sessionCookieSecure: env.SESSION_COOKIE_SECURE === 'true',
     mediaApiBaseUrl: env.MEDIA_API_BASE_URL ?? 'http://127.0.0.1:1984',
+    audioInternalBaseUrl: env.AUDIO_INTERNAL_BASE_URL ?? `http://127.0.0.1:${port}`,
     logLevel: logLevelRaw as Config['logLevel'],
   };
 }

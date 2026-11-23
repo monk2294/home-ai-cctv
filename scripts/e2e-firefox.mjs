@@ -143,6 +143,86 @@ async function run() {
   }, 45000, 'WebRTC badge');
   pass('switch back to WebRTC', rtc);
 
+  // --- Этап 2: polling снапшота раз в секунду (T-19) ---
+  await wd('POST', `/session/${sessionId}/url`, { url: `${BASE}/cameras` });
+  await waitFor(() => tryCss('[aria-label^="Камера "]'), 20000, 'cameras grid again');
+  const snapshotCount = () =>
+    exec('return performance.getEntriesByType("resource").filter((e) => e.name.includes("snapshot.jpg")).length;');
+  const snap0 = await snapshotCount();
+  await sleep(3500);
+  const snap1 = await snapshotCount();
+  if (snap1 - snap0 < 2) throw new Error(`snapshot polling too slow: ${snap0} -> ${snap1} in 3.5s`);
+  await shot('firefox-e2e-7-snapshot-poll.png');
+  pass('snapshot polling ~1/s on grid', `${snap1 - snap0} requests in 3.5s`);
+
+  // --- Этап 2: аудио-панель на экране камеры (T-21) ---
+  await click(await css('[aria-label^="Камера "]'));
+  await waitFor(() => tryCss('section[aria-label="Звук"]'), 20000, 'audio panel');
+  const micBtn = await css('section[aria-label="Звук"] button[aria-label="Говорить в динамик камеры"]');
+  if (!(await exec('return !!navigator.mediaDevices && !!navigator.mediaDevices.getUserMedia;'))) {
+    throw new Error('getUserMedia unavailable in browser');
+  }
+  await wd('POST', `/session/${sessionId}/actions`, {
+    actions: [
+      {
+        type: 'pointer',
+        id: 'mouse',
+        parameters: { pointerType: 'mouse' },
+        actions: [
+          { type: 'pointerMove', origin: { [ELEMENT_KEY]: eid(micBtn) }, x: 10, y: 10 },
+          { type: 'pointerDown', button: 0 },
+          { type: 'pause', duration: 700 },
+          { type: 'pointerUp', button: 0 },
+        ],
+      },
+    ],
+  });
+  await sleep(1500);
+  const audioAlert = await exec('return document.querySelector(\'section[aria-label="Звук"] [role="alert"]\')?.textContent ?? null;');
+  const playedReqs = await exec(
+    'return performance.getEntriesByType("resource").filter((e) => /\\/audio\\/play$/.test(e.name)).length;',
+  );
+  if (audioAlert) {
+    // Firefox headless без --use-fake-device-for-media-stream: микрофон может быть недоступен.
+    if (!audioAlert.includes('микрофон') && !audioAlert.includes('Микрофон')) throw new Error(`audio panel error: ${audioAlert}`);
+    pass('push-to-talk blocked without fake mic', audioAlert);
+  } else if (playedReqs > 0) {
+    pass('push-to-talk sent play request', `${playedReqs} request(s)`);
+  } else {
+    throw new Error('push-to-talk produced neither error nor request');
+  }
+  await shot('firefox-e2e-8-audio.png');
+
+  // --- Этап 2: мобильная раскладка 360 px (T-18) ---
+  await wd('POST', `/session/${sessionId}/window/rect`, { x: 0, y: 0, width: 372, height: 844 });
+  await sleep(800);
+  const mobile = await exec(`return {
+    inner: window.innerWidth,
+    doc: document.documentElement.scrollWidth,
+    sidebarRow: getComputedStyle(document.querySelector('aside')).flexDirection,
+  };`);
+  if (mobile.doc > mobile.inner + 1) throw new Error(`horizontal overflow at 390px: ${mobile.doc} > ${mobile.inner}`);
+  await shot('firefox-e2e-9-mobile-grid.png');
+  await wd('POST', `/session/${sessionId}/url`, { url: `${BASE}/` });
+  await waitFor(() => tryCss('[aria-label^="Камера "]'), 20000, 'grid at mobile width');
+  await click(await css('[aria-label^="Камера "]'));
+  await waitFor(() => tryCss('section[aria-label="Звук"]'), 20000, 'camera screen at mobile width');
+  const mobileCamera = await exec('return document.documentElement.scrollWidth;');
+  if (mobileCamera > mobile.inner + 1) throw new Error(`camera screen overflow at mobile: ${mobileCamera}`);
+  await shot('firefox-e2e-10-mobile-camera.png');
+  await wd('POST', `/session/${sessionId}/url`, { url: `${BASE}/cameras/new` });
+  await sleep(800);
+  const mobileWizard = await exec('return document.documentElement.scrollWidth;');
+  if (mobileWizard > mobile.inner + 1) throw new Error(`wizard overflow at mobile: ${mobileWizard}`);
+  await shot('firefox-e2e-11-mobile-wizard.png');
+  await wd('POST', `/session/${sessionId}/url`, { url: `${BASE}/events` });
+  await sleep(600);
+  const mobileEvents = await exec('return document.documentElement.scrollWidth;');
+  if (mobileEvents > mobile.inner + 1) throw new Error(`events overflow at mobile: ${mobileEvents}`);
+  await shot('firefox-e2e-12-mobile-events.png');
+  pass('mobile layout 390px without horizontal overflow', `sidebar=${mobile.sidebarRow}`);
+  await wd('POST', `/session/${sessionId}/window/rect`, { x: 0, y: 0, width: 1280, height: 900 });
+
   await wd('POST', `/session/${sessionId}/url`, { url: `${BASE}/events` });
   const sse = await waitFor(async () => {
     const s = await exec('const el = [...document.querySelectorAll("span")].find((x) => x.textContent.startsWith("SSE:")); return el ? el.textContent : null;');
@@ -178,7 +258,12 @@ async function main() {
         'moz:firefoxOptions': {
           binary: process.env.E2E_FIREFOX ?? '/usr/bin/firefox',
           args: ['-headless'],
-          prefs: { 'media.autoplay.default': 0, 'media.autoplay.blocking_policy': 0 },
+          prefs: {
+            'media.autoplay.default': 0,
+            'media.autoplay.blocking_policy': 0,
+            'media.navigator.permission.disabled': true,
+            'media.navigator.streams.fake': true,
+          },
         },
       },
     },

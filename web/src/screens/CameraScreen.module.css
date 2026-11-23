@@ -11,6 +11,12 @@
   }
 }
 
+@media (max-width: 720px) {
+  .columns {
+    gap: 14px;
+  }
+}
+
 .playerCol {
   display: flex;
   flex-direction: column;

@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Camera } from '../api/client';
-import { snapshotUrl } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 import { useEvents } from '../events/EventsContext';
+import { useSnapshotPolling } from '../hooks/useSnapshotPolling';
 import { Icon } from './Icon';
 import { StatusPill } from './StatusPill';
 import styles from './CameraTile.module.css';
@@ -20,26 +20,23 @@ function capabilityMark(state: string): string {
   return '?';
 }
 
-/** Карточка камеры: снимок, бейдж CAM, имя, возможности, ошибка, состояние, правка/удаление. */
+/** Карточка камеры: снимок (polling 1 с), бейдж CAM, имя, возможности, ошибка, состояние, правка/удаление. */
 export function CameraTile({ camera, index, onEdit, onDelete }: Props) {
   const navigate = useNavigate();
+  const { markAnonymous } = useAuth();
   const { buffer } = useEvents();
-  const [snapshotFailed, setSnapshotFailed] = useState(false);
-  const [tick, setTick] = useState(0);
+  const pollingActive = camera.enabled && camera.state === 'online';
+  const { containerRef, blobUrl } = useSnapshotPolling({
+    cameraId: camera.id,
+    width: 640,
+    active: pollingActive,
+    onUnauthorized: markAnonymous,
+  });
 
   const lastEvent = buffer.find((e) => e.camera_id === camera.id);
   const motionActive = lastEvent?.state === 'active';
 
-  // Снимок обновляется раз в 30 секунд; на скрытой вкладке polling приостановлен.
-  useEffect(() => {
-    if (camera.state !== 'online') return;
-    const timer = setInterval(() => {
-      if (document.visibilityState === 'visible') setTick((t) => t + 1);
-    }, 30_000);
-    return () => clearInterval(timer);
-  }, [camera.state]);
-
-  const showImage = camera.state === 'online' && !snapshotFailed;
+  const showImage = pollingActive && blobUrl !== null;
   const camLabel = `CAM ${String(index + 1).padStart(2, '0')}`;
   const caps = camera.capabilities;
 
@@ -54,13 +51,12 @@ export function CameraTile({ camera, index, onEdit, onDelete }: Props) {
       tabIndex={0}
       aria-label={`Камера ${camera.name}`}
     >
-      <div className={styles.media}>
+      <div className={styles.media} ref={containerRef}>
         {showImage ? (
           <img
             className={styles.image}
-            src={`${snapshotUrl(camera.id, 640)}&t=${tick}`}
+            src={blobUrl ?? ''}
             alt={`Снимок камеры ${camera.name}`}
-            onError={() => setSnapshotFailed(true)}
             loading="lazy"
           />
         ) : (

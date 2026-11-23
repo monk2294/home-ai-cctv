@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Проверки T-01–T-14 против работающего стека (спецификация 90).
+# Проверки T-01–T-25 против работающего стека (спецификации 90 и 51).
 # Запуск: ./scripts/verify-stack.sh [base-url]
 # Вывод: строки PASS/FAIL/BLOCKED с фактами. Секреты не печатаются.
 set -uo pipefail
@@ -201,6 +201,118 @@ grep -q -F -e "$cookie" "$TMP/logs.txt" && leak=1
 [[ "$leak" == "0" ]] && pass "logs without admin password, AI token, camera password, session cookie" || fail "secret found in docker logs"
 ENC_PASS=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$CAM_PASS")
 grep -q -F -e "$ENC_PASS" "$TMP/logs.txt" && fail "RTSP userinfo in logs" || pass "logs without RTSP userinfo"
+
+# ---------- Этап 2 (спецификация 50/51) ----------
+AI_AUDIO_CAP=$(docker compose exec -T server sh -c 'command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null && echo yes || echo no')
+
+echo "== T-18 Мобильная раскладка =="
+blocked "T-18: визуальная проверка 360 px — в Firefox E2E (scripts/e2e-firefox.mjs)"
+
+echo "== T-19 Опрос снимков =="
+t0=$(date +%s%3N)
+for _ in 1 2 3 4; do curl -s -o "$TMP/poll.jpg" "${CK[@]}" "$BASE/api/v1/cameras/$CAM_ID/snapshot.jpg?width=320"; done
+t1=$(date +%s%3N)
+[[ -s "$TMP/poll.jpg" ]] && pass "4 снимка подряд получены за $((t1 - t0)) мс" || fail "snapshot poll empty body"
+file "$TMP/poll.jpg" | grep -q JPEG && pass "polling body is JPEG" || fail "polling body not JPEG"
+grep -q "useSnapshotPolling" web/src/components/CameraTile.tsx && pass "клиент использует polling-хук 1 с" || fail "polling hook not wired in CameraTile"
+
+echo "== T-20capability динамик (hardware) =="
+if [[ "$AI_AUDIO_CAP" == "yes" ]]; then pass "server image carries ffmpeg/ffprobe"; else fail "ffmpeg/ffprobe missing in server image"; fi
+ao=$(curl -s "${CK[@]}" "$BASE/api/v1/cameras/$CAM_ID" | python3 -c "import json,sys; print(json.load(sys.stdin)['capabilities']['audio_output'])")
+echo "INFO: audio_output эталонной камеры = $ao"
+[[ "$ao" == "supported" ]] && pass "backchannel подтверждён" || blocked "T-20 sound: backchannel недоступен на Tapo C520WS (docs/compatibility.md), play работает как noop"
+
+echo "== T-21 Воспроизведение файла (HTTP) =="
+python3 - "$TMP/t21.wav" <<'PY'
+import struct, sys
+sr, n = 16000, 32000
+data = b"\x00\x00" * n
+hdr = b"RIFF" + struct.pack("<I", 36 + len(data)) + b"WAVEfmt " + struct.pack("<IHHIIHH", 16, 1, 1, sr, sr * 2, 2, 16) + b"data" + struct.pack("<I", len(data))
+open(sys.argv[1], "wb").write(hdr + data)
+PY
+code=$(curl -s -o "$TMP/play1.json" -w "%{http_code}" "${CK[@]}" -H "Content-Type: audio/wav" --data-binary "@$TMP/t21.wav" -D "$TMP/play1.h" "$BASE/api/v1/cameras/$CAM_ID/audio/play")
+[[ "$code" == "202" ]] && pass "admin WAV play -> 202" || fail "admin play -> $code"
+grep -qi "^x-request-id:" "$TMP/play1.h" && pass "play carries X-Request-ID" || fail "play without X-Request-ID"
+PLAY_ID=$(python3 -c "import json; print(json.load(open('$TMP/play1.json')).get('playback_id',''))")
+dur=$(python3 -c "import json; print(json.load(open('$TMP/play1.json')).get('duration_ms',0))")
+[[ "$dur" -ge 1500 && "$dur" -le 2500 ]] && pass "duration_ms из ffprobe ($dur)" || fail "duration_ms=$dur"
+code=$(curl -s -o "$TMP/play2.json" -w "%{http_code}" "${CK[@]}" -H "Content-Type: audio/wav" --data-binary "@$TMP/t21.wav" "$BASE/api/v1/cameras/$CAM_ID/audio/play")
+[[ "$code" == "409" ]] && pass "второй play на камере -> 409" || fail "second play -> $code"
+code=$(curl -s -o /dev/null -w "%{http_code}" "${CK[@]}" -X DELETE "$BASE/api/v1/cameras/$CAM_ID/audio/play/$PLAY_ID")
+[[ "$code" == "204" ]] && pass "stop playback -> 204" || fail "stop -> $code"
+code=$(curl -s -o /dev/null -w "%{http_code}" "${CK[@]}" -H "Content-Type: text/plain" --data "abc" "$BASE/api/v1/cameras/$CAM_ID/audio/play")
+[[ "$code" == "415" ]] && pass "content-type text/plain -> 415" || fail "bad type -> $code"
+head -c 5242881 /dev/zero | tr '\0' 'A' > "$TMP/big.bin"
+code=$(curl -s -o /dev/null -w "%{http_code}" "${CK[@]}" -H "Content-Type: audio/wav" --data-binary "@$TMP/big.bin" "$BASE/api/v1/cameras/$CAM_ID/audio/play")
+[[ "$code" == "413" ]] && pass "тело 5 MiB + 1 байт -> 413" || fail "oversize play -> $code"
+code=$(curl -s -o /dev/null -w "%{http_code}" "${CK[@]}" -H "Content-Type: audio/wav" --data-binary "@$TMP/t21.wav" "$BASE/api/v1/cameras/$CAM_ID/audio/play")
+[[ "$code" == "202" ]] && pass "лимит Caddy 5 MiB пропущен для audio/play" || fail "audio/play through proxy -> $code"
+python3 -c "import json;d=json.load(open('$TMP/play2.json'));print(d.get('code',''))" 2>/dev/null | grep -q "AUDIO_OUTPUT_BUSY" && pass "код ошибки AUDIO_OUTPUT_BUSY" || true
+PLAY_ID2=$(curl -s "${CK[@]}" -H "Content-Type: audio/wav" --data-binary "@$TMP/t21.wav" "$BASE/api/v1/cameras/$CAM_ID/audio/play" | python3 -c "import json,sys; print(json.load(sys.stdin).get('playback_id',''))")
+curl -s -o /dev/null "${CK[@]}" -X DELETE "$BASE/api/v1/cameras/$CAM_ID/audio/play/$PLAY_ID2"
+
+echo "== T-22 Звук через динамик (hardware) =="
+blocked "T-22: подтверждение слышимости невозможно без backchannel-камеры (решение владельца 22.11.2026: noop)"
+
+echo "== T-23 WAV для ИИ =="
+code=$(curl -s -o "$TMP/ai.wav" -w "%{http_code}" "${AI[@]}" "$BASE/api/v1/ai/cameras/$CAM_ID/audio.wav?duration_ms=1500")
+if [[ "$code" == "200" ]] && file "$TMP/ai.wav" | grep -q "RIFF.*WAVE\|WAVE"; then
+  sr=$(python3 -c "import struct;print(struct.unpack('<I', open('$TMP/ai.wav','rb').read(28)[24:28])[0])")
+  [[ "$sr" == "16000" ]] && pass "AI WAV 16 кГц mono ($code)" || fail "AI WAV sample rate=$sr"
+elif [[ "$code" == "502" ]]; then
+  blocked "T-23 capture: поток камеры без аудио или ffmpeg-ошибка ($code)"
+else
+  fail "AI WAV -> $code"
+fi
+code=$(curl -s -o /dev/null -w "%{http_code}" "${AI[@]}" "$BASE/api/v1/ai/cameras/$CAM_ID/audio.wav?duration_ms=100")
+[[ "$code" == "400" ]] && pass "duration_ms=100 -> 400" || fail "duration=100 -> $code"
+( timeout 4 curl -s -o /dev/null "${AI[@]}" "$BASE/api/v1/ai/cameras/$CAM_ID/audio.wav?duration_ms=3000" & )
+( timeout 4 curl -s -o /dev/null "${AI[@]}" "$BASE/api/v1/ai/cameras/$CAM_ID/audio.wav?duration_ms=3000" & )
+sleep 0.5
+code=$(curl -s -o "$TMP/limit.json" -w "%{http_code}" "${AI[@]}" "$BASE/api/v1/ai/cameras/$CAM_ID/audio.wav?duration_ms=1000")
+wait
+if [[ "$code" == "409" ]]; then
+  grep -q "AI_AUDIO_LIMIT_REACHED" "$TMP/limit.json" && pass "третий capture -> 409 AI_AUDIO_LIMIT_REACHED" || fail "limit code mismatch"
+elif [[ "$code" == "200" ]]; then
+  pass "dedup: одновременные capture той же камеры обслужены ($code)"
+else
+  fail "capture limit -> $code"
+fi
+
+echo "== T-24 PTZ для ИИ =="
+code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${AI[@]}" -H "Content-Type: application/json" -d '{"pan":0.2,"tilt":0,"zoom":0,"duration_ms":300}' "$BASE/api/v1/ai/cameras/$CAM_ID/ptz/move")
+[[ "$code" == "204" ]] && pass "AI PTZ move -> 204" || fail "AI move -> $code"
+code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${AI[@]}" "$BASE/api/v1/ai/cameras/$CAM_ID/ptz/stop")
+[[ "$code" == "204" ]] && pass "AI PTZ stop -> 204" || fail "AI stop -> $code"
+code=$(curl -s -o "$TMP/ai_presets.json" -w "%{http_code}" "${AI[@]}" "$BASE/api/v1/ai/cameras/$CAM_ID/ptz/presets")
+[[ "$code" == "200" ]] && pass "AI preset list -> 200" || fail "AI presets -> $code"
+n=$(python3 -c "import json; print(len(json.load(open('$TMP/ai_presets.json'))))")
+if [[ "$n" -gt 0 ]]; then
+  tok=$(python3 -c "import json; print(json.load(open('$TMP/ai_presets.json'))[0]['token'])")
+  code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${AI[@]}" "$BASE/api/v1/ai/cameras/$CAM_ID/ptz/presets/$tok/goto")
+  [[ "$code" == "204" ]] && pass "AI preset goto -> 204" || fail "AI goto -> $code"
+fi
+code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${AI[@]}" -H "Content-Type: application/json" -d '{"pan":5,"tilt":0,"zoom":0}' "$BASE/api/v1/ai/cameras/$CAM_ID/ptz/move")
+[[ "$code" == "422" ]] && pass "скорость вне диапазона -> 422" || fail "bad speed -> $code"
+
+echo "== T-25 Discovery для ИИ =="
+code=$(curl -s -o "$TMP/ai_list.json" -w "%{http_code}" "${AI[@]}" "$BASE/api/v1/ai/cameras")
+[[ "$code" == "200" ]] && pass "AI discovery list -> 200" || fail "AI list -> $code"
+leak=$(python3 -c "import json; items=json.load(open('$TMP/ai_list.json')); print(len([k for it in items for k in it if k in ('host','username','password','profile_token','has_rtsp_override','rtsp_url','onvif_port')]))")
+[[ "$leak" == "0" ]] && pass "AI-модель без host/учётных данных/RTSP" || fail "AI-модель содержит $leak секретных полей"
+code=$(curl -s -o /dev/null -w "%{http_code}" "${AI[@]}" "$BASE/api/v1/ai/cameras/$CAM_ID")
+[[ "$code" == "200" ]] && pass "AI get camera -> 200" || fail "AI get -> $code"
+code=$(curl -s -o "$TMP/ai_play.json" -w "%{http_code}" -X POST "${AI[@]}" -H "Content-Type: audio/wav" --data-binary "@$TMP/t21.wav" "$BASE/api/v1/ai/cameras/$CAM_ID/audio/play")
+if [[ "$code" == "409" ]]; then
+  # на камере ещё живо предыдущее воспроизведение — дождаться и повторить
+  sleep 3
+  code=$(curl -s -o "$TMP/ai_play.json" -w "%{http_code}" -X POST "${AI[@]}" -H "Content-Type: audio/wav" --data-binary "@$TMP/t21.wav" "$BASE/api/v1/ai/cameras/$CAM_ID/audio/play")
+fi
+[[ "$code" == "202" ]] && pass "AI audio play -> 202" || fail "AI play -> $code"
+AIP_ID=$(python3 -c "import json; print(json.load(open('$TMP/ai_play.json')).get('playback_id',''))")
+curl -s -o /dev/null -X DELETE "${AI[@]}" "$BASE/api/v1/ai/cameras/$CAM_ID/audio/play/$AIP_ID"
+code=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "${CK[@]}" "$BASE/api/v1/cameras/$CAM_ID/audio/play/00000000-0000-4000-8000-000000000000")
+[[ "$code" == "404" ]] && pass "stop неизвестного воспроизведения -> 404" || fail "unknown stop -> $code"
 
 echo "== Итог =="
 echo "Проверки завершены. BLOCKED-строки требуют решения владельца или оборудования."

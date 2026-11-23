@@ -36,6 +36,7 @@ describe('Изоляция прав camera/AI API (T-13, security checks)', () =
         events: new EventService(ctx.handle.db),
         sse: new SseHub(),
         openMjpeg: notImplemented,
+        audio: { capture: notImplemented, playback: notImplemented },
       },
     });
     close = ctx.close;

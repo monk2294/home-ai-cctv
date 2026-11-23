@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { isMotionTopic, normalizeMotion, extractRawEvent } from '../src/onvif/adapter.js';
+import { isMotionTopic, normalizeMotion } from '../src/events/motion.js';
+import { extractRawEvent } from '../src/onvif/adapter.js';
 import { dedupHash } from '../src/events/service.js';
 
 describe('ONVIF motion topics', () => {

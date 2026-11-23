@@ -108,6 +108,46 @@ export class MediaGatewayClient {
     return result;
   }
 
+  /**
+   * Медиализ медиaпродюсеров потока (например "audio, recvonly, PCMA/8000").
+   * null — поток не найден или go2rtc не вернул producers.
+   */
+  async getStreamMedias(streamName: string): Promise<string[] | null> {
+    const response = await this.request('/streams', { method: 'GET' }, { src: streamName });
+    if (response.status === 404) {
+      return null;
+    }
+    if (!response.ok) {
+      throw new MediaGatewayError('upstream', `Медиашлюз вернул ${response.status} на поток`);
+    }
+    const body = (await response.json()) as { producers?: { medias?: string[] }[] } | null;
+    if (!body || !Array.isArray(body.producers)) {
+      return null;
+    }
+    return body.producers.flatMap((p) => (Array.isArray(p.medias) ? p.medias : []));
+  }
+
+  /**
+   * Stream-to-camera (go2rtc «Play»): отправляет аудиоисточник внутрь существующего
+   * потока камеры (backchannel). src вида "ffmpeg:<url>#audio=pcma#input=file".
+   * go2rtc отвечает текстом ошибки (например "can't find consumer"), если трек недоступен.
+   */
+  async postFileToStream(dstStreamName: string, src: string): Promise<void> {
+    const response = await this.request('/streams', { method: 'POST' }, { dst: dstStreamName, src });
+    if (!response.ok) {
+      const detail = (await response.text().catch(() => '')).slice(0, 200);
+      throw new MediaGatewayError('upstream', `Медиашлюз отклонил воспроизведение: ${response.status} ${detail}`);
+    }
+  }
+
+  /** Останавливает файловое воспроизведение в потоке (POST с пустым src). */
+  async stopFileStreamPlayback(dstStreamName: string): Promise<void> {
+    const response = await this.request('/streams', { method: 'POST' }, { dst: dstStreamName, src: '' });
+    if (!response.ok) {
+      throw new MediaGatewayError('upstream', `Медиашлюз отклонил остановку воспроизведения: ${response.status}`);
+    }
+  }
+
   /** JPEG-кадр потока. width опционален (64–1920, проверяет вызывающий код). */
   async getFrame(streamName: string, width?: number): Promise<Buffer> {
     const params: Record<string, string> = { src: streamName };

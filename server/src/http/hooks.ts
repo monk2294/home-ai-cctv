@@ -41,9 +41,19 @@ export function registerErrorHandler(app: FastifyInstance): void {
         );
     }
     if (typeof error.statusCode === 'number' && error.statusCode === 413) {
+      if (request.url.includes('/audio/play')) {
+        return reply
+          .status(413)
+          .send(errorBody(new ApiError(413, 'AUDIO_TOO_LARGE', 'Аудиофайл превышает 5 МиБ.'), requestId));
+      }
       return reply
         .status(400)
         .send(errorBody(new ApiError(400, 'VALIDATION_ERROR', 'Тело запроса превышает лимит размера.'), requestId));
+    }
+    if (error.code === 'FST_ERR_CTP_INVALID_MEDIA_TYPE' && request.url.includes('/audio/play')) {
+      return reply
+        .status(415)
+        .send(errorBody(new ApiError(415, 'UNSUPPORTED_AUDIO_FORMAT', 'Поддерживаются audio/wav и audio/mpeg.'), requestId));
     }
     if (error.statusCode && error.statusCode < 500) {
       return reply

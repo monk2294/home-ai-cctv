@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: home-ai-cctv API
-  version: 1.0.0
-  description: API локальной платформы для IP-камер. Cookie используется администратором, Bearer-токен — только ИИ-агентом. Timestamps используют RFC 3339 UTC. Каждый response содержит X-Request-ID; тело ошибки содержит тот же request_id.
+  version: 1.1.0
+  description: API локальной платформы для IP-камер. Cookie используется администратором, Bearer-токен — только ИИ-агентом. Timestamps используют RFC 3339 UTC. Каждый response содержит X-Request-ID; тело ошибки содержит тот же request_id. API 1.1 добавляет WAV, PTZ и воспроизведение аудио для ИИ.
 servers:
   - url: /
 tags:
@@ -15,7 +15,7 @@ tags:
   - name: Events
     description: История событий и SSE-поток.
   - name: AI
-    description: JPEG и MJPEG для ИИ-агента.
+    description: Обнаружение камер, JPEG, MJPEG, WAV, PTZ и воспроизведение аудио для ИИ-агента.
   - name: Health
     description: Liveness и readiness.
 paths:
@@ -144,6 +144,12 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '422':
+          description: Ни один адаптер не определил камеру. Код CAMERA_ADAPTER_NOT_DETECTED, безопасное сообщение для пользователя.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         default:
           $ref: '#/components/responses/UpstreamError'
   /api/v1/cameras/probe/snapshot.jpg:
@@ -330,6 +336,75 @@ paths:
                 $ref: '#/components/schemas/Error'
         default:
           $ref: '#/components/responses/UpstreamError'
+  /api/v1/cameras/{camera_id}/audio/play:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+    post:
+      tags: [Cameras]
+      operationId: playCameraAudio
+      summary: Проиграть WAV или MP3 через динамик камеры
+      description: Сырое тело содержит аудиофайл до 5 МиБ и длительностью до 30 секунд. Ответ 202 означает приём команды go2rtc, а не подтверждение физического звука. На камере допускается одно файловое воспроизведение для admin и AI вместе.
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          audio/wav:
+            schema:
+              type: string
+              format: binary
+          audio/mpeg:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '202':
+          description: Воспроизведение запущено.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioPlayback'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/AudioTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedAudioFormat'
+        '422':
+          description: Файл не содержит декодируемый звук или превышает 30 секунд. Коды INVALID_AUDIO и AUDIO_DURATION_LIMIT_EXCEEDED.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          $ref: '#/components/responses/UpstreamError'
+  /api/v1/cameras/{camera_id}/audio/play/{playback_id}:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+      - $ref: '#/components/parameters/PlaybackId'
+    delete:
+      tags: [Cameras]
+      operationId: stopCameraAudio
+      summary: Остановить воспроизведение аудио на камере
+      security:
+        - cookieAuth: []
+      responses:
+        '204':
+          description: Воспроизведение остановлено, ресурсы освобождены.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Камера не найдена или playback завершён. Для playback используется код AUDIO_PLAYBACK_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          $ref: '#/components/responses/UpstreamError'
   /api/v1/cameras/{camera_id}/ptz/move:
     parameters:
       - $ref: '#/components/parameters/CameraId'
@@ -469,6 +544,48 @@ paths:
                 type: string
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /api/v1/ai/cameras:
+    get:
+      tags: [AI]
+      operationId: listAiCameras
+      summary: Получить безопасный список камер для ИИ-агента
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Камеры без host, username, RTSP, секретов и внутренних stream names.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AiCamera'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/v1/ai/cameras/{camera_id}:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+    get:
+      tags: [AI]
+      operationId: getAiCamera
+      summary: Получить состояние и возможности камеры для ИИ-агента
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Безопасная модель AiCamera.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiCamera'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/v1/ai/cameras/{camera_id}/snapshot.jpg:
     parameters:
       - $ref: '#/components/parameters/CameraId'
@@ -553,6 +670,230 @@ paths:
                 $ref: '#/components/schemas/Error'
         default:
           $ref: '#/components/responses/UpstreamError'
+  /api/v1/ai/cameras/{camera_id}/audio.wav:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+      - name: duration_ms
+        in: query
+        description: Длительность нового фрагмента текущего звука.
+        schema:
+          type: integer
+          minimum: 1000
+          maximum: 15000
+          default: 5000
+    get:
+      tags: [AI]
+      operationId: getAiCameraAudio
+      summary: Получить конечный WAV-фрагмент текущего звука камеры
+      description: Сервер возвращает новый фрагмент PCM signed 16-bit little-endian, mono, 16000 Hz. Фрагмент не сохраняется. Запускается один capture на камеру и не более двух capture на сервер.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Полный WAV с корректным header. Частичный WAV после ошибки источника не возвращается.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            audio/wav:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Камера отключена или недоступна, звук не поддерживается, либо достигнут лимит capture. Коды CAMERA_DISABLED, CAMERA_UNAVAILABLE, CAPABILITY_UNSUPPORTED, AI_AUDIO_LIMIT_REACHED.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          $ref: '#/components/responses/UpstreamError'
+  /api/v1/ai/cameras/{camera_id}/ptz/move:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+    post:
+      tags: [AI]
+      operationId: moveAiCameraPtz
+      summary: Выполнить Continuous Move от имени ИИ-агента
+      description: Использует общий с admin API PtzService, лимит 5 секунд, автоматический Stop и generation token.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PtzMoveRequest'
+      responses:
+        '204':
+          description: Команда принята камерой, автоматический Stop запланирован.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/UpstreamError'
+  /api/v1/ai/cameras/{camera_id}/ptz/stop:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+    post:
+      tags: [AI]
+      operationId: stopAiCameraPtz
+      summary: Остановить движение PTZ от имени ИИ-агента
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Камера подтвердила Stop.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/UpstreamError'
+  /api/v1/ai/cameras/{camera_id}/ptz/presets:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+    get:
+      tags: [AI]
+      operationId: listAiCameraPtzPresets
+      summary: Получить пресеты PTZ для ИИ-агента
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Список пресетов текущего профиля.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PtzPreset'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/UpstreamError'
+  /api/v1/ai/cameras/{camera_id}/ptz/presets/{preset_token}/goto:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+      - $ref: '#/components/parameters/PresetToken'
+    post:
+      tags: [AI]
+      operationId: gotoAiCameraPtzPreset
+      summary: Перейти к пресету PTZ от имени ИИ-агента
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Камера приняла команду.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/UpstreamError'
+  /api/v1/ai/cameras/{camera_id}/audio/play:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+    post:
+      tags: [AI]
+      operationId: playAiCameraAudio
+      summary: Проиграть WAV или MP3 через динамик камеры от имени ИИ-агента
+      description: Сырое тело содержит аудиофайл до 5 МиБ и длительностью до 30 секунд. Использует общий с admin API AudioOutputService и общий лимит одного playback на камеру.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          audio/wav:
+            schema:
+              type: string
+              format: binary
+          audio/mpeg:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '202':
+          description: Команда принята go2rtc. Физическое воспроизведение проверяется на камере отдельно.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioPlayback'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/AudioTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedAudioFormat'
+        '422':
+          description: Файл не содержит декодируемый звук или превышает 30 секунд. Коды INVALID_AUDIO и AUDIO_DURATION_LIMIT_EXCEEDED.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          $ref: '#/components/responses/UpstreamError'
+  /api/v1/ai/cameras/{camera_id}/audio/play/{playback_id}:
+    parameters:
+      - $ref: '#/components/parameters/CameraId'
+      - $ref: '#/components/parameters/PlaybackId'
+    delete:
+      tags: [AI]
+      operationId: stopAiCameraAudio
+      summary: Остановить воспроизведение аудио от имени ИИ-агента
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Воспроизведение остановлено, ресурсы освобождены.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Камера не найдена или playback завершён. Для playback используется код AUDIO_PLAYBACK_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          $ref: '#/components/responses/UpstreamError'
   /api/v1/health/live:
     get:
       tags: [Health]
@@ -616,6 +957,14 @@ components:
         type: string
         minLength: 1
         maxLength: 256
+    PlaybackId:
+      name: playback_id
+      in: path
+      required: true
+      description: UUIDv4 файлового воспроизведения, назначенный сервером.
+      schema:
+        type: string
+        format: uuid
     SnapshotWidth:
       name: width
       in: query
@@ -645,6 +994,18 @@ components:
             $ref: '#/components/schemas/Error'
     NotFound:
       description: Камера или пресет не найдены.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    AudioTooLarge:
+      description: Аудиофайл превышает 5 МиБ, код AUDIO_TOO_LARGE.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    UnsupportedAudioFormat:
+      description: MIME не равен audio/wav или audio/mpeg, код UNSUPPORTED_AUDIO_FORMAT.
       content:
         application/json:
           schema:
@@ -711,12 +1072,18 @@ components:
       description: disabled означает пользовательское отключение, offline — техническую недоступность включённой камеры.
     CameraCapabilities:
       type: object
-      required: [video, audio, motion_events, ptz_continuous, ptz_presets]
+      required: [video, audio, audio_output, motion_events, ptz_continuous, ptz_presets]
       properties:
         video:
           $ref: '#/components/schemas/CapabilityState'
         audio:
-          $ref: '#/components/schemas/CapabilityState'
+          description: Приём звука с микрофона камеры.
+          allOf:
+            - $ref: '#/components/schemas/CapabilityState'
+        audio_output:
+          description: Передача звука на динамик камеры через ONVIF Profile T backchannel.
+          allOf:
+            - $ref: '#/components/schemas/CapabilityState'
         motion_events:
           $ref: '#/components/schemas/CapabilityState'
         ptz_continuous:
@@ -778,6 +1145,46 @@ components:
           type: string
           format: date-time
         updated_at:
+          type: string
+          format: date-time
+    AiCamera:
+      type: object
+      description: Модель для ИИ без host, учётных данных, RTSP, profile token и внутренних stream names.
+      required: [id, name, state, capabilities, last_error]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        state:
+          $ref: '#/components/schemas/CameraState'
+        capabilities:
+          $ref: '#/components/schemas/CameraCapabilities'
+        last_error:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/CameraError'
+    AudioPlayback:
+      type: object
+      description: Команда файлового воспроизведения. estimated_end_at вычисляется по длительности файла и не подтверждает физический звук.
+      required: [playback_id, camera_id, duration_ms, started_at, estimated_end_at]
+      properties:
+        playback_id:
+          type: string
+          format: uuid
+        camera_id:
+          type: string
+          format: uuid
+        duration_ms:
+          type: integer
+          minimum: 1
+          maximum: 30000
+        started_at:
+          type: string
+          format: date-time
+        estimated_end_at:
           type: string
           format: date-time
     ProbeRequest:

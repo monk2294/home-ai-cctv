@@ -62,3 +62,22 @@
 .statusDotWarn {
   background: var(--accent-clay);
 }
+
+@media (max-width: 720px) {
+  .header {
+    flex-wrap: wrap;
+    gap: 10px;
+    min-height: 0;
+    padding: 12px 14px;
+  }
+
+  .title {
+    font-size: 22px;
+    gap: 10px;
+  }
+
+  .right {
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+}

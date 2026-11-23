@@ -1,4 +1,6 @@
-import type { OnvifSession } from '../onvif/types.js';
+import type { CameraSession } from '../cameras/adapter.js';
+
+type PtzCameraSession = Pick<CameraSession, 'ptzContinuousMove' | 'ptzStop'>;
 
 export interface PtzMoveInput {
   pan: number;
@@ -44,7 +46,7 @@ export class PtzService {
    * Отправляет Continuous Move и планирует Stop на тот же срок.
    * sessionProvider возвращает активную сессию или null (камера недоступна).
    */
-  async move(cameraId: string, input: PtzMoveInput, sessionProvider: () => OnvifSession | null): Promise<'ok' | 'unavailable'> {
+  async move(cameraId: string, input: PtzMoveInput, sessionProvider: () => PtzCameraSession | null): Promise<'ok' | 'unavailable'> {
     const session = sessionProvider();
     if (!session) {
       return 'unavailable';
@@ -69,7 +71,7 @@ export class PtzService {
   }
 
   /** Ручной Stop: отменяет таймер и ждёт ответа камеры. */
-  async stop(cameraId: string, sessionProvider: () => OnvifSession | null): Promise<'ok' | 'unavailable'> {
+  async stop(cameraId: string, sessionProvider: () => PtzCameraSession | null): Promise<'ok' | 'unavailable'> {
     const session = sessionProvider();
     if (!session) {
       return 'unavailable';
@@ -84,7 +86,7 @@ export class PtzService {
   }
 
   /** Best-effort Stop при shutdown/disable/delete (раздел 7.2). */
-  stopBestEffort(cameraId: string, sessionProvider: () => OnvifSession | null): void {
+  stopBestEffort(cameraId: string, sessionProvider: () => PtzCameraSession | null): void {
     const previous = this.active.get(cameraId);
     if (previous) {
       clearTimeout(previous.timer);
@@ -97,7 +99,7 @@ export class PtzService {
   }
 
   /** Stop для всех активных камер при завершении работы сервера. */
-  async shutdown(sessionProvider: (cameraId: string) => OnvifSession | null): Promise<void> {
+  async shutdown(sessionProvider: (cameraId: string) => PtzCameraSession | null): Promise<void> {
     const ids = [...this.active.keys()];
     for (const id of ids) {
       const previous = this.active.get(id);

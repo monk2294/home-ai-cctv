@@ -1,6 +1,6 @@
 # 10. Сервер
 
-Связанные требования: FR-01–FR-13, NFR-04, NFR-06–NFR-11.
+Связанные требования: FR-01–FR-13, NFR-04, NFR-06–NFR-11, S2-FR-02–S2-FR-08. Целевые правила этапа 2 — в `50-stage-2.md`.
 
 ## 1. Назначение
 
@@ -17,7 +17,7 @@
 - Drizzle ORM, `better-sqlite3` и версионированные миграции Drizzle.
 - SQLite в режиме WAL.
 - Встроенный `fetch`/Undici с `AbortSignal` для HTTP-запросов к go2rtc.
-- Асинхронный ONVIF-адаптер за внутренним TypeScript-интерфейсом.
+- Реестр адаптеров камер за общим TypeScript-интерфейсом. Адаптер выбирается автоматическим перебором: специализированный Tapo C520WS, затем общий ONVIF.
 - Пакет `argon2` и алгоритм Argon2id для пароля администратора.
 - Встроенный `node:crypto` и AES-256-GCM для секретов камер.
 - OpenAPI 3.0.3 в `contracts/api-v1.openapi.yaml`.
@@ -36,7 +36,9 @@
 | Event Service | Нормализация, хранение и SSE |
 | PTZ Service | Move, Stop, пресеты и таймеры остановки |
 | Media Gateway Client | Создание, обновление и удаление потоков go2rtc |
-| AI Media API | JPEG и MJPEG с проверкой прав и лимитов |
+| AI Media API | Обнаружение камер, JPEG, MJPEG, WAV, PTZ и audio playback с проверкой прав и лимитов |
+| Audio Output Service | WAV/MP3 validation, временный buffer, Stream to camera, Stop и cleanup |
+| AI Audio Capture | Конечные WAV-фрагменты через FFmpeg с лимитами процессов |
 | Reconciliation | Восстановление состояния после запуска и ошибок |
 | Persistence | Модели, транзакции, миграции и retention |
 
@@ -97,7 +99,8 @@ API никогда не возвращает password, RTSP credentials или R
 Сервер определяет:
 
 - видео;
-- звук;
+- входящий звук (`audio`);
+- передачу звука на динамик (`audio_output`, этап 2);
 - события движения;
 - Continuous Move;
 - пресеты PTZ.
@@ -117,7 +120,7 @@ API никогда не возвращает password, RTSP credentials или R
 3. Получить информацию об устройстве.
 4. Получить media profiles.
 5. Получить capabilities и события.
-6. Получить кодеки и разрешения доступных профилей.
+6. Получить кодеки и разрешения доступных профилей. В этапе 2 проверить ONVIF backchannel по `50-stage-2.md`, не блокируя Probe при ошибке этой проверки.
 7. Проверить RTSP override, если пользователь его задал. Разрешён только scheme `rtsp://`. Userinfo в URL запрещён: сервер использует отдельные username и password. Максимальная длина URL — 2048 символов.
 8. Вернуть профили и возможности без RTSP-URL.
 9. Завершить временные подключения.
@@ -159,7 +162,7 @@ Probe не создаёт постоянный поток и не сохраня
 Переход `enabled=true → false`:
 
 1. Переводит камеру в `disabled` и запрещает новые media/PTZ-команды.
-2. Отправляет PTZ Stop best effort при активном движении.
+2. Отправляет PTZ Stop best effort при активном движении. В этапе 2 останавливает audio playback и WAV capture.
 3. Отменяет ONVIF-подписки и таймеры.
 4. Закрывает MJPEG и удаляет media stream.
 5. Сохраняет события и последние известные capabilities.
@@ -173,7 +176,7 @@ Probe не создаёт постоянный поток и не сохраня
 1. Запретить новые команды камере.
 2. Остановить PTZ best effort.
 3. Отменить таймеры и ONVIF-подписки.
-4. Закрыть MJPEG и другие активные AI-запросы этой камеры.
+4. Закрыть MJPEG и другие активные AI-запросы этой камеры. В этапе 2 остановить audio playback и WAV capture.
 5. Удалить поток go2rtc.
 6. Удалить запись камеры, события и секреты из БД.
 
@@ -186,7 +189,7 @@ Probe не создаёт постоянный поток и не сохраня
 - Операция доступна только для `enabled=true`.
 - Для `disabled` сервер возвращает `409 CAMERA_DISABLED`.
 - Сервер отменяет старые ONVIF-задачи, subscriptions и PTZ-таймеры.
-- Сервер закрывает активный MJPEG consumer и удаляет его транскодер.
+- Сервер закрывает активный MJPEG consumer и удаляет его транскодер. В этапе 2 также останавливает audio playback и WAV capture.
 - Сервер переводит камеру в `connecting` и запускает Reconciliation для одной камеры.
 - Повторный вызов во время reconnect заменяет прежнюю попытку и не создаёт параллельные задачи.
 - Ответ содержит актуальную публичную модель камеры.
@@ -300,7 +303,9 @@ Probe не создаёт постоянный поток и не сохраня
 - Bearer-токен содержит не менее 256 бит энтропии и читается из отдельного файла секрета.
 - Сравнение токена выполняется за постоянное время.
 - Токен даёт доступ только к `/api/v1/ai/*` и публичному liveness.
-- Токен не даёт доступа к CRUD, PTZ, событиям и администраторской сессии.
+- В MVP токен не даёт доступа к CRUD, PTZ, событиям и администраторской сессии.
+- В этапе 2 токен разрешает только AI PTZ, AI audio playback, WAV и discovery по `50-stage-2.md`. CRUD, admin PTZ, admin events и администраторская сессия остаются закрытыми.
+- AI Bearer имеет физическое управление камерой в этапе 2. Веб-клиент не получает этот токен.
 - Токен нельзя передавать в query string.
 
 ### 8.3 Защита API
@@ -373,6 +378,10 @@ MJPEG не предназначен для удалённого просмотр
 
 `null` для WebRTC или HLS означает, что режим не настроен. Оба поля не могут быть `null` в успешном ответе.
 
+### 9.5 API этапа 2
+
+`50-stage-2.md` и OpenAPI 1.1 определяют AI discovery, конечный WAV, AI PTZ и файловое воспроизведение. Admin и AI playback используют общий `AudioOutputService` и общий busy-лимит. Сервер не принимает внешние media URL и не сохраняет аудиоархив.
+
 ## 10. Reconciliation
 
 После запуска сервер:
@@ -419,9 +428,11 @@ SQLite использует:
 | 400 | `VALIDATION_ERROR`, `INVALID_PROFILE` |
 | 401 | `UNAUTHORIZED` |
 | 403 | `FORBIDDEN` |
-| 404 | `CAMERA_NOT_FOUND`, `PRESET_NOT_FOUND` |
-| 409 | `CAMERA_LIMIT_REACHED`, `DUPLICATE_CAMERA_NAME`, `CAPABILITY_UNSUPPORTED`, `CAMERA_UNAVAILABLE`, `CAMERA_DISABLED`, `AI_STREAM_LIMIT_REACHED` |
-| 422 | Ошибка JSON Schema/Ajv-валидации в единой обёртке `Error` |
+| 404 | `CAMERA_NOT_FOUND`, `PRESET_NOT_FOUND`, `AUDIO_PLAYBACK_NOT_FOUND` |
+| 409 | `CAMERA_LIMIT_REACHED`, `DUPLICATE_CAMERA_NAME`, `CAPABILITY_UNSUPPORTED`, `CAMERA_UNAVAILABLE`, `CAMERA_DISABLED`, `AI_STREAM_LIMIT_REACHED`, `AI_AUDIO_LIMIT_REACHED`, `AUDIO_OUTPUT_BUSY` |
+| 413 | `AUDIO_TOO_LARGE` |
+| 415 | `UNSUPPORTED_AUDIO_FORMAT` |
+| 422 | Ошибка JSON Schema/Ajv-валидации, `CAMERA_ADAPTER_NOT_DETECTED`, `INVALID_AUDIO` или `AUDIO_DURATION_LIMIT_EXCEEDED` в единой обёртке `Error` |
 | 429 | `TOO_MANY_LOGIN_ATTEMPTS` |
 | 502 | `ONVIF_UPSTREAM_ERROR`, `MEDIA_UPSTREAM_ERROR` |
 | 503 | `CAMERA_MEDIA_UNAVAILABLE`, `MEDIA_GATEWAY_UNAVAILABLE` |
@@ -438,7 +449,7 @@ SQLite использует:
 - Не логировать тело login, probe, create и update.
 - Очищать userinfo и query credentials из URL.
 - Не логировать Authorization и Cookie.
-- Не логировать JPEG и бинарные медиаданные.
+- Не логировать JPEG, WAV и другие бинарные медиаданные. Не логировать тела audio upload и временные internal audio URL.
 
 ### Healthcheck
 

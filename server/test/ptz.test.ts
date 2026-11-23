@@ -1,21 +1,14 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { PtzService, PTZ_DEFAULT_DURATION_MS } from '../src/ptz/service.js';
-import type { OnvifSession } from '../src/onvif/types.js';
-
-function fakeSession(calls: string[]): OnvifSession {
+function fakeSession(calls: string[]) {
   return {
-    getStreamUri: async () => 'rtsp://example/stream',
     ptzContinuousMove: async (...args: unknown[]) => {
       calls.push(`move:${JSON.stringify(args)}`);
     },
     ptzStop: async () => {
       calls.push('stop');
     },
-    getPtzPresets: async () => [],
-    gotoPreset: async () => undefined,
-    onEvent: () => () => undefined,
-    close: async () => undefined,
   };
 }
 

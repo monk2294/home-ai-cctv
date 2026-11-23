@@ -181,6 +181,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cameras/{camera_id}/audio/play": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUIDv4, назначенный сервером. */
+                camera_id: components["parameters"]["CameraId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Проиграть WAV или MP3 через динамик камеры
+         * @description Сырое тело содержит аудиофайл до 5 МиБ и длительностью до 30 секунд. Ответ 202 означает приём команды go2rtc, а не подтверждение физического звука. На камере допускается одно файловое воспроизведение для admin и AI вместе.
+         */
+        post: operations["playCameraAudio"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cameras/{camera_id}/audio/play/{playback_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUIDv4, назначенный сервером. */
+                camera_id: components["parameters"]["CameraId"];
+                /** @description UUIDv4 файлового воспроизведения, назначенный сервером. */
+                playback_id: components["parameters"]["PlaybackId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Остановить воспроизведение аудио на камере */
+        delete: operations["stopCameraAudio"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cameras/{camera_id}/ptz/move": {
         parameters: {
             query?: never;
@@ -304,6 +349,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai/cameras": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Получить безопасный список камер для ИИ-агента */
+        get: operations["listAiCameras"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/cameras/{camera_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUIDv4, назначенный сервером. */
+                camera_id: components["parameters"]["CameraId"];
+            };
+            cookie?: never;
+        };
+        /** Получить состояние и возможности камеры для ИИ-агента */
+        get: operations["getAiCamera"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ai/cameras/{camera_id}/snapshot.jpg": {
         parameters: {
             query?: {
@@ -344,6 +426,161 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/cameras/{camera_id}/audio.wav": {
+        parameters: {
+            query?: {
+                /** @description Длительность нового фрагмента текущего звука. */
+                duration_ms?: number;
+            };
+            header?: never;
+            path: {
+                /** @description UUIDv4, назначенный сервером. */
+                camera_id: components["parameters"]["CameraId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Получить конечный WAV-фрагмент текущего звука камеры
+         * @description Сервер возвращает новый фрагмент PCM signed 16-bit little-endian, mono, 16000 Hz. Фрагмент не сохраняется. Запускается один capture на камеру и не более двух capture на сервер.
+         */
+        get: operations["getAiCameraAudio"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/cameras/{camera_id}/ptz/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUIDv4, назначенный сервером. */
+                camera_id: components["parameters"]["CameraId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Выполнить Continuous Move от имени ИИ-агента
+         * @description Использует общий с admin API PtzService, лимит 5 секунд, автоматический Stop и generation token.
+         */
+        post: operations["moveAiCameraPtz"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/cameras/{camera_id}/ptz/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUIDv4, назначенный сервером. */
+                camera_id: components["parameters"]["CameraId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Остановить движение PTZ от имени ИИ-агента */
+        post: operations["stopAiCameraPtz"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/cameras/{camera_id}/ptz/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUIDv4, назначенный сервером. */
+                camera_id: components["parameters"]["CameraId"];
+            };
+            cookie?: never;
+        };
+        /** Получить пресеты PTZ для ИИ-агента */
+        get: operations["listAiCameraPtzPresets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/cameras/{camera_id}/ptz/presets/{preset_token}/goto": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUIDv4, назначенный сервером. */
+                camera_id: components["parameters"]["CameraId"];
+                preset_token: components["parameters"]["PresetToken"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Перейти к пресету PTZ от имени ИИ-агента */
+        post: operations["gotoAiCameraPtzPreset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/cameras/{camera_id}/audio/play": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUIDv4, назначенный сервером. */
+                camera_id: components["parameters"]["CameraId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Проиграть WAV или MP3 через динамик камеры от имени ИИ-агента
+         * @description Сырое тело содержит аудиофайл до 5 МиБ и длительностью до 30 секунд. Использует общий с admin API AudioOutputService и общий лимит одного playback на камеру.
+         */
+        post: operations["playAiCameraAudio"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/cameras/{camera_id}/audio/play/{playback_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUIDv4, назначенный сервером. */
+                camera_id: components["parameters"]["CameraId"];
+                /** @description UUIDv4 файлового воспроизведения, назначенный сервером. */
+                playback_id: components["parameters"]["PlaybackId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Остановить воспроизведение аудио от имени ИИ-агента */
+        delete: operations["stopAiCameraAudio"];
         options?: never;
         head?: never;
         patch?: never;
@@ -423,7 +660,10 @@ export interface components {
         CameraState: "disabled" | "connecting" | "online" | "degraded" | "offline";
         CameraCapabilities: {
             video: components["schemas"]["CapabilityState"];
+            /** @description Приём звука с микрофона камеры. */
             audio: components["schemas"]["CapabilityState"];
+            /** @description Передача звука на динамик камеры через ONVIF Profile T backchannel. */
+            audio_output: components["schemas"]["CapabilityState"];
             motion_events: components["schemas"]["CapabilityState"];
             ptz_continuous: components["schemas"]["CapabilityState"];
             ptz_presets: components["schemas"]["CapabilityState"];
@@ -459,6 +699,27 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        /** @description Модель для ИИ без host, учётных данных, RTSP, profile token и внутренних stream names. */
+        AiCamera: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            state: components["schemas"]["CameraState"];
+            capabilities: components["schemas"]["CameraCapabilities"];
+            last_error: components["schemas"]["CameraError"] | null;
+        };
+        /** @description Команда файлового воспроизведения. estimated_end_at вычисляется по длительности файла и не подтверждает физический звук. */
+        AudioPlayback: {
+            /** Format: uuid */
+            playback_id: string;
+            /** Format: uuid */
+            camera_id: string;
+            duration_ms: number;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            estimated_end_at: string;
         };
         ProbeRequest: {
             /** @example 192.0.2.10 */
@@ -640,6 +901,24 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description Аудиофайл превышает 5 МиБ, код AUDIO_TOO_LARGE. */
+        AudioTooLarge: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description MIME не равен audio/wav или audio/mpeg, код UNSUPPORTED_AUDIO_FORMAT. */
+        UnsupportedAudioFormat: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description Конфликт состояния, лимита, имени или возможности камеры. */
         Conflict: {
             headers: {
@@ -663,6 +942,8 @@ export interface components {
         /** @description UUIDv4, назначенный сервером. */
         CameraId: string;
         PresetToken: string;
+        /** @description UUIDv4 файлового воспроизведения, назначенный сервером. */
+        PlaybackId: string;
         SnapshotWidth: number;
     };
     requestBodies: never;
@@ -1031,6 +1312,83 @@ export interface operations {
             default: components["responses"]["UpstreamError"];
         };
     };
+    playCameraAudio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUIDv4, назначенный сервером. */
+                camera_id: components["parameters"]["CameraId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "audio/wav": string;
+                "audio/mpeg": string;
+            };
+        };
+        responses: {
+            /** @description Воспроизведение запущено. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AudioPlayback"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["AudioTooLarge"];
+            415: components["responses"]["UnsupportedAudioFormat"];
+            /** @description Файл не содержит декодируемый звук или превышает 30 секунд. Коды INVALID_AUDIO и AUDIO_DURATION_LIMIT_EXCEEDED. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            default: components["responses"]["UpstreamError"];
+        };
+    };
+    stopCameraAudio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUIDv4, назначенный сервером. */
+                camera_id: components["parameters"]["CameraId"];
+                /** @description UUIDv4 файлового воспроизведения, назначенный сервером. */
+                playback_id: components["parameters"]["PlaybackId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Воспроизведение остановлено, ресурсы освобождены. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Камера не найдена или playback завершён. Для playback используется код AUDIO_PLAYBACK_NOT_FOUND. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            default: components["responses"]["UpstreamError"];
+        };
+    };
     moveCameraPtz: {
         parameters: {
             query?: never;
@@ -1187,6 +1545,54 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
+    listAiCameras: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Камеры без host, username, RTSP, секретов и внутренних stream names. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiCamera"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getAiCamera: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUIDv4, назначенный сервером. */
+                camera_id: components["parameters"]["CameraId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Безопасная модель AiCamera. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiCamera"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     getAiCameraSnapshot: {
         parameters: {
             query?: {
@@ -1256,6 +1662,238 @@ export interface operations {
             404: components["responses"]["NotFound"];
             /** @description Камера отключена (CAMERA_DISABLED) или уже имеет MJPEG consumer (AI_STREAM_LIMIT_REACHED). */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            default: components["responses"]["UpstreamError"];
+        };
+    };
+    getAiCameraAudio: {
+        parameters: {
+            query?: {
+                /** @description Длительность нового фрагмента текущего звука. */
+                duration_ms?: number;
+            };
+            header?: never;
+            path: {
+                /** @description UUIDv4, назначенный сервером. */
+                camera_id: components["parameters"]["CameraId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Полный WAV с корректным header. Частичный WAV после ошибки источника не возвращается. */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "audio/wav": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Камера отключена или недоступна, звук не поддерживается, либо достигнут лимит capture. Коды CAMERA_DISABLED, CAMERA_UNAVAILABLE, CAPABILITY_UNSUPPORTED, AI_AUDIO_LIMIT_REACHED. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            default: components["responses"]["UpstreamError"];
+        };
+    };
+    moveAiCameraPtz: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUIDv4, назначенный сервером. */
+                camera_id: components["parameters"]["CameraId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PtzMoveRequest"];
+            };
+        };
+        responses: {
+            /** @description Команда принята камерой, автоматический Stop запланирован. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["UpstreamError"];
+        };
+    };
+    stopAiCameraPtz: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUIDv4, назначенный сервером. */
+                camera_id: components["parameters"]["CameraId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Камера подтвердила Stop. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["UpstreamError"];
+        };
+    };
+    listAiCameraPtzPresets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUIDv4, назначенный сервером. */
+                camera_id: components["parameters"]["CameraId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список пресетов текущего профиля. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PtzPreset"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["UpstreamError"];
+        };
+    };
+    gotoAiCameraPtzPreset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUIDv4, назначенный сервером. */
+                camera_id: components["parameters"]["CameraId"];
+                preset_token: components["parameters"]["PresetToken"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Камера приняла команду. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["UpstreamError"];
+        };
+    };
+    playAiCameraAudio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUIDv4, назначенный сервером. */
+                camera_id: components["parameters"]["CameraId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "audio/wav": string;
+                "audio/mpeg": string;
+            };
+        };
+        responses: {
+            /** @description Команда принята go2rtc. Физическое воспроизведение проверяется на камере отдельно. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AudioPlayback"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["AudioTooLarge"];
+            415: components["responses"]["UnsupportedAudioFormat"];
+            /** @description Файл не содержит декодируемый звук или превышает 30 секунд. Коды INVALID_AUDIO и AUDIO_DURATION_LIMIT_EXCEEDED. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            default: components["responses"]["UpstreamError"];
+        };
+    };
+    stopAiCameraAudio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUIDv4, назначенный сервером. */
+                camera_id: components["parameters"]["CameraId"];
+                /** @description UUIDv4 файлового воспроизведения, назначенный сервером. */
+                playback_id: components["parameters"]["PlaybackId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Воспроизведение остановлено, ресурсы освобождены. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Камера не найдена или playback завершён. Для playback используется код AUDIO_PLAYBACK_NOT_FOUND. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

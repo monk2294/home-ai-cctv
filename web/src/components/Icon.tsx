@@ -18,6 +18,7 @@ import zoomIn from '../assets/icons/zoom-in.svg';
 import zoomOut from '../assets/icons/zoom-out.svg';
 import plus from '../assets/icons/plus.svg';
 import preset from '../assets/icons/preset.svg';
+import mic from '../assets/icons/mic.svg';
 
 const ICONS = {
   'nav-cameras': navCameras,
@@ -40,6 +41,7 @@ const ICONS = {
   'zoom-out': zoomOut,
   plus,
   preset,
+  mic,
 } as const;
 
 export type IconName = keyof typeof ICONS;

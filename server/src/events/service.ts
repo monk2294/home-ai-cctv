@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto';
 import { and, asc, desc, eq, gt, sql } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { cameraEvents } from '../db/schema.js';
-import type { RawCameraEvent } from '../onvif/types.js';
-import { normalizeMotion } from '../onvif/adapter.js';
+import type { RawCameraEvent } from '../cameras/adapter.js';
+import { normalizeMotion } from './motion.js';
 
 export interface CameraEvent {
   id: string;

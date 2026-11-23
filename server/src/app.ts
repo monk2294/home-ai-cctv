@@ -9,10 +9,14 @@ import { registerHealthRoutes } from './http/routes/health.js';
 import { registerCameraRoutes } from './http/routes/cameras.js';
 import { registerPtzRoutes } from './http/routes/ptz.js';
 import { registerAiRoutes, registerEventRoutes } from './http/routes/events.js';
+import { registerAdminAudioRoutes, registerAiAudioRoutes, registerInternalAudioRoutes } from './http/routes/audio.js';
+import { registerAiDiscoveryRoutes, registerAiPtzRoutes } from './http/routes/ai.js';
 import type { CameraManager } from './cameras/manager.js';
 import type { PtzService } from './ptz/service.js';
 import type { EventService } from './events/service.js';
 import type { SseHub } from './events/sse.js';
+import type { AudioCaptureService } from './audio/capture.js';
+import type { AudioPlaybackService } from './audio/playback.js';
 import type { Readable } from 'node:stream';
 
 export interface MediaGatewayChecker {
@@ -34,6 +38,10 @@ export interface AppDeps {
     events: EventService;
     sse: SseHub;
     openMjpeg: (cameraId: string, fps: number, width: number) => Promise<Readable>;
+    audio: {
+      capture: AudioCaptureService;
+      playback: AudioPlaybackService;
+    };
   };
 }
 
@@ -48,6 +56,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   registerRequestId(app);
   registerErrorHandler(app);
+
+  // Аудиофайлы парсятся как Buffer; точный формат проверяет аудиомаршрут (415).
+  for (const audioType of [
+    'audio/wav', 'audio/mpeg', 'audio/mp4', 'audio/ogg', 'audio/aac', 'audio/flac', 'application/octet-stream',
+  ]) {
+    app.addContentTypeParser(audioType, { parseAs: 'buffer' }, (_request, body, done) => done(null, body));
+  }
 
   // CORS не включается. Мутирующие cookie-запросы проверяют Origin (раздел 8.3).
   app.addHook('onRequest', async (request) => {
@@ -86,6 +101,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       registerCameraRoutes(scoped, cameras.manager);
       registerPtzRoutes(scoped, cameras.manager, cameras.ptz);
       registerEventRoutes(scoped, cameras.events, cameras.sse, cameras.manager);
+      registerAdminAudioRoutes(scoped, cameras.audio);
     });
     // AI-маршруты отдельно: только Bearer-токен.
     registerAiRoutes(app, {
@@ -93,6 +109,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       manager: cameras.manager,
       openMjpeg: cameras.openMjpeg,
     });
+    registerAiDiscoveryRoutes(app, { aiApiToken: deps.aiApiToken, manager: cameras.manager });
+    registerAiPtzRoutes(app, { aiApiToken: deps.aiApiToken, manager: cameras.manager });
+    registerAiAudioRoutes(app, {
+      aiApiToken: deps.aiApiToken,
+      capture: cameras.audio.capture,
+      playback: cameras.audio.playback,
+    });
+    // Выдача аудиофайла контейнеру media; наружу Caddy этот путь не пропускает.
+    registerInternalAudioRoutes(app, cameras.audio.playback);
   }
 
   return app;

@@ -6,7 +6,7 @@ import { runMigrations } from '../src/db/migrate.js';
 import { cameras } from '../src/db/schema.js';
 import { EventService } from '../src/events/service.js';
 import { SseHub } from '../src/events/sse.js';
-import type { RawCameraEvent } from '../src/onvif/types.js';
+import type { RawCameraEvent } from '../src/cameras/adapter.js';
 
 function motionRaw(state: string, utcTime = '2026-11-21T12:00:00.000Z'): RawCameraEvent {
   return {
