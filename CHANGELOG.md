@@ -18,6 +18,7 @@
 ### Исправлено
 
 - `loadConfig(env)` читает файлы секретов из переданного environment.
+- Override `esbuild=0.28.2` устраняет GHSA-67mh-4wv8-2f99 в transitive dev-зависимости `drizzle-kit`.
 
 ## [0.1.0] - 2026-11-23
 

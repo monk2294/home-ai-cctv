@@ -73,3 +73,4 @@
 
 - 2026-11-23 — Gitleaks 8.30.1 проверил пять исходных commits. Два finding относятся к тестовому Bearer `wrong-token` и стандартному WebSocket handshake key. Точечные allowlist-правила устранили оба false positive; повторный scan не нашёл leaks.
 - 2026-11-23 — Проверка генерации нашла отсутствующий ответ 422 Probe в generated types. Commit `fix: sync generated OpenAPI types` устранил расхождение до запуска CI.
+- 2026-11-23 — Dependabot нашёл GHSA-67mh-4wv8-2f99 в dev-зависимости `drizzle-kit`. Override `esbuild=0.28.2` и dedupe удалили vulnerable copy. `npm audit` возвращает 0, а `db:generate` завершается без schema changes.
