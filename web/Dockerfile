@@ -5,6 +5,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY server/package.json server/
 COPY web/package.json web/
+COPY mcp/package.json mcp/
 RUN npm ci --workspace web --include-workspace-root=false --no-audit --no-fund
 COPY web/ web/
 RUN npm run build --workspace web

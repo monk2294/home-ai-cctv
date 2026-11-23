@@ -9,11 +9,6 @@
 		level INFO
 	}
 
-	# Тело JSON-запросов ограничено небольшим размером (спецификация 30, раздел 9).
-	request_body {
-		max_size 64KB
-	}
-
 	# Readiness не публикуется наружу (спецификация 30, раздел 3).
 	@ready path /api/v1/health/ready
 	handle @ready {
@@ -22,6 +17,9 @@
 
 	@apiSession path /api/v1/auth/session*
 	handle @apiSession {
+		request_body {
+			max_size 64KB
+		}
 		reverse_proxy server:8000
 	}
 
@@ -30,8 +28,35 @@
 		reverse_proxy server:8000
 	}
 
+	# Файловое воспроизведение: тело до 5 МиБ только на двух POST audio/play маршрутах (спецификация 50).
+	@audioPlay {
+		method POST
+		path /api/v1/cameras/*/audio/play /api/v1/ai/cameras/*/audio/play
+	}
+	handle @audioPlay {
+		request_body {
+			max_size 5MiB
+		}
+		reverse_proxy server:8000
+	}
+
+	# MCP для ИИ-агентов: WAV base64 в JSON-RPC, лимит тела выше обычного API (спецификация 60).
+	@mcp path /mcp*
+	handle @mcp {
+		request_body {
+			max_size 8MiB
+		}
+		reverse_proxy mcp:3000 {
+			flush_interval -1
+		}
+	}
+
 	@api path /api/v1/*
 	handle @api {
+		# Тело JSON-запросов ограничено небольшим размером (спецификация 30, раздел 9).
+		request_body {
+			max_size 64KB
+		}
 		reverse_proxy server:8000 {
 			# SSE и streaming без буферизации.
 			flush_interval -1
@@ -74,7 +99,7 @@
 		X-Content-Type-Options nosniff
 		Referrer-Policy no-referrer
 		X-Frame-Options DENY
-		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Permissions-Policy "camera=(), microphone=(self), geolocation=()"
 		Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; script-src 'self'; worker-src 'self' blob:"
 		-Server
 	}

@@ -5,7 +5,8 @@
   "description": "Локальная платформа для IP-камер с удалённым просмотром, PTZ, событиями движения и API для ИИ-агента.",
   "workspaces": [
     "server",
-    "web"
+    "web",
+    "mcp"
   ],
   "scripts": {
     "dev": "npm run dev --workspace server",

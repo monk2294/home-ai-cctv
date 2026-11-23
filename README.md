@@ -1,14 +1,14 @@
 # home-ai-cctv
 
 Локальная платформа для IP-камер: удалённый просмотр, PTZ, события движения и API для ИИ-агента.
-Архитектура, требования и решения — в [docs/](docs/README.md).
+Архитектура, требования и решения — в [docs/](docs/README.md). Требования этапа 2 — в [docs/specs/50-stage-2.md](docs/specs/50-stage-2.md). Самодостаточное задание агенту-исполнителю — в [docs/specs/51-stage-2-executor-task.md](docs/specs/51-stage-2-executor-task.md).
 
 ## Состав
 
 | Каталог | Содержимое |
 |---|---|
-| `server/` | Node.js 22 + Fastify + SQLite (Drizzle). Авторизация, API v1. |
-| `web/` | React + Vite + TypeScript. Веб-клиент администратора. |
+| `server/` | Node.js 22 + Fastify + SQLite (Drizzle). Авторизация, API v1, звук (WAV-захват для ИИ, воспроизведение файлов). |
+| `web/` | React + Vite + TypeScript. Веб-клиент администратора: просмотр, PTZ, события, push-to-talk, polling снимков, мобильная раскладка. |
 | `config/` | Caddyfile и go2rtc.yaml для Docker Compose. |
 | `scripts/` | Создание файлов секретов. |
 | `docs/` | Спецификации и OpenAPI-контракт. |
@@ -80,8 +80,8 @@ docker compose exec server node scripts/reset-admin-password.mjs
 ## Проверки стека
 
 ```bash
-./scripts/verify-stack.sh            # T-01–T-14 против работающего стека: PASS/FAIL/BLOCKED с фактами
-E2E_FIREFOX=$HOME/opt/firefox/firefox node scripts/e2e-firefox.mjs   # интерактивные E2E Firefox (8 шагов)
+./scripts/verify-stack.sh            # T-01–T-25 против работающего стека: PASS/FAIL/BLOCKED с фактами
+E2E_FIREFOX=$HOME/opt/firefox/firefox node scripts/e2e-firefox.mjs   # интерактивные E2E Firefox (11 шагов)
 ```
 
 Матрица результатов и отложенные работы — [docs/verification.md](docs/verification.md).

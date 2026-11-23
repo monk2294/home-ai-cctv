@@ -57,6 +57,7 @@ services:
       SERVER_PORT: 8000
       DATABASE_PATH: /data/home-ai-cctv.db
       MEDIA_API_BASE_URL: http://media:1984
+      AUDIO_INTERNAL_BASE_URL: http://server:8000
       ADMIN_PASSWORD_FILE: /run/secrets/admin_password
       AI_API_TOKEN_FILE: /run/secrets/ai_api_token
       CAMERA_ENCRYPTION_KEY_FILE: /run/secrets/camera_encryption_key
@@ -79,7 +80,33 @@ services:
       retries: 3
       start_period: 20s
 
+  mcp:
+    build:
+      context: .
+      dockerfile: mcp/Dockerfile
+    image: home-ai-cctv/mcp:0.1.0
+    <<: [*restart, *logging]
+    networks:
+      - backend
+    environment:
+      MCP_PORT: 3000
+      SERVER_API_BASE_URL: http://server:8000
+      AI_API_TOKEN_FILE: /run/secrets/ai_api_token
+    secrets:
+      - ai_api_token
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   media:
+
     image: ghcr.io/alexxit/go2rtc:1.9.9
     <<: [*restart, *logging]
     networks:
