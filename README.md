@@ -96,3 +96,7 @@ opentunnel route add 8080 --name cctv   # печатает https://cctv.<id>.ope
 ```
 
 Для Secure cookie задайте `SESSION_COOKIE_SECURE=true` в `.env` и перезапустите server; вход выполняйте по HTTPS-URL туннеля. URL туннеля не является аутентификацией: доступ к платформе всё равно требует пароль администратора.
+
+## Лицензия
+
+MIT, см. [LICENSE](LICENSE).
