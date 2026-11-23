@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM node:22.16.0-bookworm-slim AS build
+FROM node:22.23.5-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY server/package.json server/
