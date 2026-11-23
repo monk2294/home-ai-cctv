@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Сборка server-образа из корня монорепозитория (нужен package-lock.json).
 
-FROM node:22.16.0-bookworm-slim AS build
+FROM node:22.23.5-bookworm-slim AS build
 WORKDIR /app
 # Сборка нативных модулей (better-sqlite3, argon2), если prebuild недоступен.
 RUN apt-get update \
@@ -15,7 +15,7 @@ RUN npm ci --workspace server --include-workspace-root=false --no-audit --no-fun
 COPY server/ server/
 RUN npm run build --workspace server
 
-FROM node:22.16.0-bookworm-slim AS deps
+FROM node:22.23.5-bookworm-slim AS deps
 WORKDIR /app
 RUN apt-get update \
  && apt-get install -y --no-install-recommends python3 make g++ \
@@ -26,7 +26,7 @@ COPY web/package.json web/
 COPY mcp/package.json mcp/
 RUN npm ci --workspace server --include-workspace-root=false --omit=dev --no-audit --no-fund
 
-FROM node:22.16.0-bookworm-slim
+FROM node:22.23.5-bookworm-slim
 ENV NODE_ENV=production
 WORKDIR /app/server
 # FFmpeg/ffprobe нужны звуковым сервисам сервера (захват WAV для ИИ, проверка длительности).
