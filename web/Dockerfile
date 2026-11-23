@@ -10,7 +10,7 @@ RUN npm ci --workspace web --include-workspace-root=false --no-audit --no-fund
 COPY web/ web/
 RUN npm run build --workspace web
 
-FROM nginx:1.27.4-alpine
+FROM nginx:1.31.9-alpine
 COPY --from=build /app/web/dist /usr/share/nginx/html
 COPY web/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
