@@ -51,4 +51,24 @@ describe('Health endpoints', () => {
       await notReadyCtx.close();
     }
   });
+
+  test('глобальный rate limit возвращает 429 в формате Error', async () => {
+    const limitedCtx = await buildTestApp({ rateLimitPerMinute: 2 });
+    try {
+      const first = await limitedCtx.app.inject({ method: 'GET', url: '/api/v1/health/live', headers: { 'x-request-id': 'req-rate-1' } });
+      const second = await limitedCtx.app.inject({ method: 'GET', url: '/api/v1/health/live' });
+      assert.equal(first.statusCode, 200);
+      assert.equal(second.statusCode, 200);
+      const limited = await limitedCtx.app.inject({ method: 'GET', url: '/api/v1/health/live', headers: { 'x-request-id': 'req-rate-3' } });
+      assert.equal(limited.statusCode, 429);
+      assert.equal(limited.headers['x-request-id'], 'req-rate-3');
+      assert.deepEqual(limited.json(), {
+        code: 'RATE_LIMIT_EXCEEDED',
+        message: 'Слишком много запросов. Повторите позже.',
+        request_id: 'req-rate-3',
+      });
+    } finally {
+      await limitedCtx.close();
+    }
+  });
 });

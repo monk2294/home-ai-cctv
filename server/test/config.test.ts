@@ -29,12 +29,14 @@ describe('loadConfig limits', () => {
     const config = loadConfig(testEnv());
     assert.equal(config.maxCameras, 4);
     assert.equal(config.eventRetentionPerCamera, 1000);
+    assert.equal(config.httpRateLimitPerMinute, 1200);
   });
 
   test('читает MAX_CAMERAS и EVENT_RETENTION_PER_CAMERA', () => {
-    const config = loadConfig(testEnv({ MAX_CAMERAS: '8', EVENT_RETENTION_PER_CAMERA: '250' }));
+    const config = loadConfig(testEnv({ MAX_CAMERAS: '8', EVENT_RETENTION_PER_CAMERA: '250', HTTP_RATE_LIMIT_PER_MINUTE: '600' }));
     assert.equal(config.maxCameras, 8);
     assert.equal(config.eventRetentionPerCamera, 250);
+    assert.equal(config.httpRateLimitPerMinute, 600);
   });
 
   test('отклоняет нулевые, отрицательные и дробные limits', () => {
@@ -43,6 +45,7 @@ describe('loadConfig limits', () => {
       ['MAX_CAMERAS', '1.5'],
       ['EVENT_RETENTION_PER_CAMERA', '-1'],
       ['EVENT_RETENTION_PER_CAMERA', 'many'],
+      ['HTTP_RATE_LIMIT_PER_MINUTE', '0'],
     ] as const) {
       assert.throws(() => loadConfig(testEnv({ [name]: value })), new RegExp(name));
     }
