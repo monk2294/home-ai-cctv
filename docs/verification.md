@@ -2,7 +2,7 @@
 
 Дата прогона: 2026-11-22. Стенд: Docker Compose на хосте 192.168.1.203, эталонная камера TP-Link Tapo C520WS (192.168.1.193:2020). Браузер: YaBrowser 26.8 (Chromium 150), Firefox 160 headless (сборка mozilla).
 
-Воспроизведение API-проверок: `./scripts/verify-stack.sh` (54 PASS-строки, фактический вывод ниже). Unit-тесты: `npm test` — 114/114. Firefox E2E: `E2E_FIREFOX=<путь к firefox> node scripts/e2e-firefox.mjs`. Проверки Chromium выполнены через CDP, скриншоты в `docs/evidence/`.
+Воспроизведение API-проверок: `./scripts/verify-stack.sh` (54 PASS-строки, фактический вывод ниже). Unit-тесты: `npm test` — 114/114. Firefox E2E: `E2E_FIREFOX=<путь к firefox> node scripts/e2e-firefox.mjs`. Проверки Chromium выполнены через CDP. Скриншоты и CSV остаются локальными artifacts и исключены из git.
 
 ## 1. Сценарии T-01–T-25
 
@@ -26,11 +26,11 @@ T-01–T-17 содержат фактические результаты MVP. T-
 | T-14 | PASS | `docker compose logs` не содержат пароль администратора, AI-токен, пароль камеры, session cookie и RTSP userinfo (проверка `grep -F -e`). |
 | T-15 | PASS | OpenTunnel (`anomalyco/opentunnel`, blind TLS, только TCP 443). `scripts/verify-tunnel.sh`: 10/10 — static, login, Secure cookie (secure-режим проверен на изолированном стенде), JSON body без потерь, WSS answer, SSE 130 с (8 heartbeat), HLS playlist+segment, MJPEG 130 с (254 кадра), одновременный API, cookie attributes не меняются, reconnect tunnel. Удалённый режим — HLS; WebRTC media через tunnel не переносится. |
 | T-16 | PASS | `scripts/backup.sh`: SQLite backup API, сессии исключены (4 удалены), камеры и 1000 событий в копии. Restore на отдельном стеке `cctv-restore-test`: readiness ok, камера online, снимок JPEG 320×180, один `cam_`-поток. Потеря ключа обнаруживается: AES-GCM auth error при чужом ключе. |
-| T-17 | PASS | `scripts/load-test.mjs 60`, профиль 90 §7 на 2 камерах (у владельца 2, запас 4 — расчётный). 2 зрителя WebRTC 2560×1440 + 1 MJPEG (2 fps) на камеру + ONVIF subscriptions, 60 минут. LOAD_STATUS GREEN: server RSS 144→155 МиБ (+7.6%), media RSS 98→118 МиБ (+21.7%), fd 36→34, FFmpeg-процессы после остановки 0, зрители 2/2 всё время. Пик CPU: server 10.9%, media 137.4% (≈1.4 ядра на 6-ядерном хосте). Кадры MJPEG ~7526 за час (≈2.1 fps). CSV `docs/evidence/load-60min.csv`. |
-| T-18 | PASS | Firefox 160 headless, 372 px (ширина контента 360): grid, экран камеры, мастер добавления, события — без горизонтального переполнения; сайдбар сворачивается в верхнюю панель (`sidebar=row`). E2E 12/12. Скриншоты `docs/evidence/firefox-e2e-9-mobile-grid.png`, `firefox-e2e-10-mobile-camera.png`, `firefox-e2e-11-mobile-wizard.png`, `firefox-e2e-12-mobile-events.png`. Реальные Android/iOS остаются за владельцем (раздел 4). |
+| T-17 | PASS | `scripts/load-test.mjs 60`, профиль 90 §7 на 2 камерах (у владельца 2, запас 4 — расчётный). 2 зрителя WebRTC 2560×1440 + 1 MJPEG (2 fps) на камеру + ONVIF subscriptions, 60 минут. LOAD_STATUS GREEN: server RSS 144→155 МиБ (+7.6%), media RSS 98→118 МиБ (+21.7%), fd 36→34, FFmpeg-процессы после остановки 0, зрители 2/2 всё время. Пик CPU: server 10.9%, media 137.4% (≈1.4 ядра на 6-ядерном хосте). Кадры MJPEG ~7526 за час (≈2.1 fps). CSV сохранён только как локальный artifact. |
+| T-18 | PASS | Firefox 160 headless, 372 px (ширина контента 360): grid, экран камеры, мастер добавления, события — без горизонтального переполнения; сайдбар сворачивается в верхнюю панель (`sidebar=row`). E2E 12/12. Скриншоты исключены из публичного репозитория. Реальные Android/iOS остаются за владельцем (раздел 4). |
 | T-19 | PASS | Клиент: `useSnapshotPolling` — fetch раз в 1 с, пауза на скрытой вкладке и вне вьюпорта (IntersectionObserver), backoff 5 с, остановка при 401 (logout) и 409 (CAMERA_DISABLED). E2E: 5 запросов `snapshot.jpg` за 3.5 с. Сервер: in-flight дедупликация (6 параллельных запросов → 1 вызов go2rtc), кэш кадра 250 мс — тесты `server/test/stage2.test.ts`. |
 | T-20 | PART | Tapo C520WS 1.3.5: RTSP SDP не содержит обратного аудиотрека. Специализированный Tapo-адаптер автоматически проверяет media-порт 8800 и добавляет `tapo://`; probe возвращает `audio_output=supported`, go2rtc отправляет PCMA/8000. Файловый звук слышен, браузерный живой микрофон не перепроверялся. Детали — `compatibility.md`. |
-| T-21 | PART | Push-to-talk в E2E (фейковый микрофон Firefox): запись → WAV 16 кГц mono → `POST audio/play` 202, `firefox-e2e-8-audio.png`. Файловый picker: WAV/MP3, клиентский лимит 5 МиБ, stop-кнопка. HTTP-контракт play/stop/413/415/422/409 — PASS (секция T-21 в `verify-stack.sh`). Физический звук — T-22. |
+| T-21 | PART | Push-to-talk в E2E (фейковый микрофон Firefox): запись → WAV 16 кГц mono → `POST audio/play` 202. Файловый picker: WAV/MP3, клиентский лимит 5 МиБ, stop-кнопка. HTTP-контракт play/stop/413/415/422/409 — PASS (секция T-21 в `verify-stack.sh`). Физический звук — T-22. |
 | T-22 | PART | WAV через динамик реальной камеры слышен; микрофон хоста обнаружил тестовые тона. HTTP-контракт play/stop/ошибки проходит в тестах. Физическое прерывание Stop во время звука не перепроверялось. При `audio_output!=supported` сохраняется no-op по решению владельца. |
 | T-23 | PASS | `GET /api/v1/ai/cameras/{id}/audio.wav`: RIFF/WAVE 16000 Гц mono (200); `duration_ms=100` → 400; одновременные capture той же камеры обслужены (dedup); ffmpeg/ffprobe 5.1.9 в серверном образе. |
 | T-24 | PASS | AI PTZ: move/stop → 204, presets → 200, goto → 204 по Bearer; скорость вне диапазона → 422. |
@@ -41,10 +41,10 @@ T-01–T-17 содержат фактические результаты MVP. T-
 | Браузер | Статус | Факт |
 |---|---|---|
 | YaBrowser 26.8 / Chromium 150 (desktop) | PASS | Login/logout, сетка, плеер WebRTC и HLS, fallback, PTZ pointer/keyboard, SSE, мастер, настройки. |
-| Firefox 160 (desktop, headless) | PASS | Интерактивные E2E 12/12: login, сетка, плеер WebRTC 2560×1440, PTZ move/hold/stop, goto пресета, ручной HLS и возврат в WebRTC, polling снимков ~1/с, push-to-talk (фейковый микрофон) с запросом audio/play, мобильная раскладка 372 px, SSE «подключено», logout. Скрипт `scripts/e2e-firefox.mjs` (geckodriver 0.36, WebDriver REST), скриншоты `docs/evidence/firefox-e2e-*.png`. |
+| Firefox 160 (desktop, headless) | PASS | Интерактивные E2E 12/12: login, сетка, плеер WebRTC 2560×1440, PTZ move/hold/stop, goto пресета, ручной HLS и возврат в WebRTC, polling снимков ~1/с, push-to-talk (фейковый микрофон) с запросом audio/play, мобильная раскладка 372 px, SSE «подключено», logout. Скрипт `scripts/e2e-firefox.mjs` (geckodriver 0.36, WebDriver REST); скриншоты сохраняются локально и не входят в git. |
 | Safari desktop | NOT_RUN | Исключён из обязательного списка MVP. |
 | iOS Safari и Android Chrome | NOT_RUN | Обязательны для этапа 2 по `specs/50-stage-2.md`. Реальные устройства ещё не проверялись. |
-| Мобильная эмуляция MVP | FAIL для адаптива | На 390×844 и 768×1024 desktop-раскладка не сворачивается; на 390 px есть наложения в шапке и ленте. Скриншоты `docs/evidence/mobile-*`, `tablet-*`. Это исходные данные для T-18, а не проверка мобильного браузера. |
+| Мобильная эмуляция MVP | FAIL для адаптива | На 390×844 и 768×1024 desktop-раскладка не сворачивается; на 390 px есть наложения в шапке и ленте. Это исходные данные для T-18, а не проверка мобильного браузера. Скриншоты исключены из публичного репозитория. |
 
 ## 3. Unit и typecheck
 
@@ -60,7 +60,7 @@ T-01–T-17 содержат фактические результаты MVP. T-
 - Репозиторий и права: рабочий `config/go2rtc.yaml` (streams с учётными данными камер) — 0600 и в `.gitignore`; в репозитории только `config/go2rtc.example.yaml` без streams. `secrets/` и `backups/` также исключены. Example проверен запуском go2rtc 1.9.9 в отдельном контейнере: api и webrtc слушают, ошибок конфига нет.
 - `WEBRTC_LAN_CANDIDATE`: entrypoint медиашлюза подставляет кандидата из env перед стартом go2rtc; без env остаётся значение из config. Проверено: подстановка в песочнице на другом адресе, рестарт media с env, WebRTC после рестарта.
 - Secure cookie через tunnel: на изолированном стенде с `SESSION_COOKIE_SECURE=true` Set-Cookie несёт `Secure; HttpOnly; SameSite=Strict`; tunnel attributes не меняет.
-- Скриншоты: `docs/evidence/firefox-login.png`, `docs/evidence/firefox-e2e-1-login.png` … `firefox-e2e-6-logout.png`, `docs/evidence/chrome-cameras.png`, `docs/evidence/chrome-camera-webrtc.png`, `docs/evidence/latency-frame-1.png` … `latency-frame-4.jpg`.
+- Скриншоты: создаются только как локальные artifacts; каталог `docs/evidence/` исключён из git.
 
 ## 3.2 Задержка WebRTC (T-03, NFR-02)
 
@@ -73,19 +73,19 @@ T-01–T-17 содержат фактические результаты MVP. T-
 | 3 | 00:53:50.316 | 00:53:49.50x | 807–816 мс |
 | 4 | 00:57:40.247 | 00:57:39.30x | 938–947 мс |
 
-Вывод: задержка 0.48–0.95 с, цель ≤ 2 с выполнена. Кадры: `docs/evidence/latency-frame-1.png`, `latency-frame-2.jpg`, `latency-frame-3.jpg`, `latency-frame-4.jpg`.
+Вывод: задержка 0.48–0.95 с, цель ≤ 2 с выполнена. Исходные кадры не входят в публичный репозиторий.
 
 ## 3.3 Инструменты браузерных проверок
 
 - Firefox E2E: geckodriver 0.36.0 (бинарник mozilla в `~/.local/bin/geckodriver`) и Firefox 160.0.1 (сборка mozilla в `~/opt/firefox`). Snap-версии не пригодны: snap geckodriver не видит хостовый `/usr/bin/firefox`, snap Firefox не принимает внешний `-profile` и не отдаёт Marionette-порт. Playwright не используется по правилам окружения.
 - Запуск: `E2E_FIREFOX=$HOME/opt/firefox/firefox node scripts/e2e-firefox.mjs`. Переопределения: `E2E_BASE_URL`, `E2E_GECKO_PORT`, `E2E_GECKODRIVER`.
-- Chromium: проверки через CDP (chrome-devtools), скриншоты `docs/evidence/chrome-*.png`.
+- Chromium: проверки через CDP (chrome-devtools); скриншоты остаются локальными artifacts.
 - OpenTunnel: CLI 0.6.2 (`~/.local/bin/opentunnel`), маршрут `cctv` → 127.0.0.1:8080. Secure-cookie проверялся на изолированном проекте `cctv-secure-test` (override: proxy 8081, `SESSION_COOKIE_SECURE=true`, media не запускается, чтобы не трогать общий config).
-- T-17: `scripts/load-test.mjs 60` — 2 зрителя headless Firefox (WebRTC), по 1 MJPEG consumer на камеру, ежеминутные семплы RSS/fd/ffmpeg; CSV `docs/evidence/load-60min.csv`.
+- T-17: `scripts/load-test.mjs 60` — 2 зрителя headless Firefox (WebRTC), по 1 MJPEG consumer на камеру, ежеминутные семплы RSS/fd/ffmpeg; CSV сохраняется локально в исключённом из git каталоге.
 
 ## 4. Отложенные работы (требуют владельца или оборудования)
 
-1. Мобильные устройства: владелец проверяет сам. MVP был desktop-only; этап 2 требует T-18 на реальных Android Chrome и iOS Safari. Исходная эмуляция: `docs/evidence/mobile-*`, `tablet-*`. Эмуляция этапа 2 (Firefox, 372 px) пройдена: `firefox-e2e-9-mobile-grid.png`, `firefox-e2e-10-mobile-camera.png`, `firefox-e2e-11-mobile-wizard.png`, `firefox-e2e-12-mobile-events.png`.
+1. Мобильные устройства: владелец проверяет сам. MVP был desktop-only; этап 2 требует T-18 на реальных Android Chrome и iOS Safari. Исходные screenshots эмуляции сохранены только локально. Эмуляция этапа 2 (Firefox, 372 px) пройдена.
 2. Живой микрофон и физический Stop (T-20–T-22): файловый звук через `tapo://` уже работает. Нужно отдельно проверить живой браузерный push-to-talk и прерывание звука кнопкой Stop без повторных громких прогонов.
 3. Микрофон в реальном браузере телефона: требует HTTPS (GetUser Media только в secure context). На стенде HTTP только `127.0.0.1` является secure context; для LAN-доступа нужен сертификат (отложено).
 

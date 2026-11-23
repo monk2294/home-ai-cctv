@@ -17,7 +17,7 @@ Local IP-camera platform: Node.js 22 + Fastify + SQLite (Drizzle) server, React 
 - `scripts/verify-stack.sh` — runs T-01–T-25 checks against the live stack, prints PASS/FAIL/BLOCKED; camera params are read from the running DB, no secrets in the script. Results matrix: `docs/verification.md`.
 - `scripts/e2e-firefox.mjs` — interactive Firefox E2E over geckodriver/WebDriver (no Playwright): login, grid, WebRTC/HLS player, PTZ, presets, snapshot polling, push-to-talk audio panel, 390 px mobile layout, SSE, logout. Needs non-snap geckodriver and a mozilla Firefox build (`E2E_FIREFOX`); tooling notes in `docs/verification.md` §3.3.
 - `scripts/verify-tunnel.sh` — T-15 network experiment through OpenTunnel (spec 30 §8.2): static, login/Secure cookie, JSON body, WSS, SSE, HLS, MJPEG, concurrency, cookie attributes, reconnect.
-- `scripts/load-test.mjs` — T-17 load run: 2 headless Firefox viewers (WebRTC) + 1 MJPEG consumer per camera, per-minute RSS/fd/ffmpeg sampling, CSV in `docs/evidence/`, verdict LOAD_STATUS.
+- `scripts/load-test.mjs` — T-17 load run: 2 headless Firefox viewers (WebRTC) + 1 MJPEG consumer per camera, per-minute RSS/fd/ffmpeg sampling, CSV in local gitignored `docs/evidence/`, verdict LOAD_STATUS.
 - `server/scripts/reset-admin-password.mjs` — admin password recovery via `docker compose exec server node scripts/reset-admin-password.mjs` (TTY, no echo, kills sessions).
 - `docker-compose.yaml` — proxy, web, server, media, mcp; networks `edge` (proxy+web) and `backend` (proxy+server+media+mcp).
 
@@ -28,9 +28,9 @@ Local IP-camera platform: Node.js 22 + Fastify + SQLite (Drizzle) server, React 
 - `npm run dev` — server hot-reload; `npm run dev --workspace web` — Vite on :5173 (proxies /api, /media to :8080)
 - `npm run generate:api` — regenerate `server/src/generated/api-v1.d.ts` from the OpenAPI contract
 - `npm run db:generate --workspace server` — Drizzle SQL migration after changing `server/src/db/schema.ts`
-- `E2E_FIREFOX=$HOME/opt/firefox/firefox node scripts/e2e-firefox.mjs` — Firefox E2E against the live stack, screenshots to `docs/evidence/`
+- `E2E_FIREFOX=$HOME/opt/firefox/firefox node scripts/e2e-firefox.mjs` — Firefox E2E against the live stack, screenshots to the local gitignored `docs/evidence/`
 - `./scripts/verify-tunnel.sh <https-base>` — T-15 network experiment through OpenTunnel (spec 30 §8.2), ~5 min
-- `node scripts/load-test.mjs [minutes]` — T-17 load run: 2 Firefox viewers + 1 MJPEG consumer per camera, RSS/fd sampling, CSV in `docs/evidence/`
+- `node scripts/load-test.mjs [minutes]` — T-17 load run: 2 Firefox viewers + 1 MJPEG consumer per camera, RSS/fd sampling, CSV in local gitignored `docs/evidence/`
 - `./scripts/init-secrets.sh && docker compose build && docker compose up -d`
 - `git tag vX.Y.Z && git push origin vX.Y.Z` — release workflow verifies the tag, publishes versioned GHCR images and creates a GitHub Release; package versions and `IMAGE_TAG` must match first
 

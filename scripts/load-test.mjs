@@ -2,7 +2,7 @@
 // фактический стенд владельца — 2 камеры (запас 4 не воспроизводится, решение владельца 2026-11-22).
 // Профиль: 2 зрителя (headless Firefox, WebRTC), 1 MJPEG consumer на камеру, ONVIF subscriptions включены сервером.
 // geckodriver держит одну сессию на процесс: каждому зрителю — свой драйвер и порт.
-// Запуск: node scripts/load-test.mjs [minutes]. Результат: docs/evidence/load-<N>min.csv + вердикт LOAD_STATUS.
+// Запуск: node scripts/load-test.mjs [minutes]. Результат: локальный gitignored docs/evidence/load-<N>min.csv + вердикт LOAD_STATUS.
 import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync, appendFileSync, openSync } from 'node:fs';
 import { homedir } from 'node:os';

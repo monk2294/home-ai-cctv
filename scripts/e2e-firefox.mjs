@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Интерактивные E2E в Firefox через geckodriver (WebDriver REST, без Playwright).
 // Запуск: node scripts/e2e-firefox.mjs. Стенд должен быть поднят (docker compose up -d).
-// Скриншоты шагов пишутся в docs/evidence/firefox-e2e-*.png.
+// Скриншоты шагов пишутся в локальный gitignored docs/evidence/firefox-e2e-*.png.
 // Нужен geckodriver вне snap confinement: snap-версия не видит /usr/bin/firefox.
 // Бинарник mozilla кладётся в ~/.local/bin/geckodriver (или путь в E2E_GECKODRIVER).
 // snap Firefox не принимает внешний -profile и не отдаёт Marionette порт:
