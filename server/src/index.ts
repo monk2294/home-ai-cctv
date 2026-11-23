@@ -7,12 +7,16 @@ import { buildApp } from './app.js';
 import { createMediaChecker } from './media/checker.js';
 import { MediaGatewayClient } from './media/client.js';
 import { LibOnvifAdapter } from './onvif/adapter.js';
+import { TapoC520wsAdapter } from './tapo/adapter.js';
+import { CameraAdapterRegistry } from './cameras/adapter-registry.js';
 import { CameraManager } from './cameras/manager.js';
 import { EventService } from './events/service.js';
 import { SseHub } from './events/sse.js';
 import { PtzService } from './ptz/service.js';
 import { AiStreamRegistry } from './ai/registry.js';
 import { createMjpegHandler } from './http/routes/mjpeg.js';
+import { AudioCaptureService } from './audio/capture.js';
+import { AudioPlaybackService } from './audio/playback.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -36,9 +40,11 @@ async function main(): Promise<void> {
     const ptz = new PtzService();
     const registry = new AiStreamRegistry(mediaClient);
 
+    const onvif = new LibOnvifAdapter();
+    const adapters = new CameraAdapterRegistry([new TapoC520wsAdapter(onvif), onvif]);
     const manager = new CameraManager(
       handle,
-      new LibOnvifAdapter(),
+      adapters,
       mediaClient,
       events,
       sse,
@@ -46,6 +52,10 @@ async function main(): Promise<void> {
       cameraKey,
     );
     const openMjpeg = createMjpegHandler(manager, mediaClient, registry);
+    const audioCapture = new AudioCaptureService(manager);
+    const audioPlayback = new AudioPlaybackService(manager, mediaClient, config.audioInternalBaseUrl, {
+      warn: (message, ...args) => console.warn(message, ...args),
+    });
 
     const app = await buildApp({
       db: handle,
@@ -55,7 +65,7 @@ async function main(): Promise<void> {
       logLevel: config.logLevel,
       migrationsDone: () => migrationsDone,
       media: mediaChecker,
-      cameras: { manager, ptz, events, sse, openMjpeg },
+      cameras: { manager, ptz, events, sse, openMjpeg, audio: { capture: audioCapture, playback: audioPlayback } },
     });
 
     // Периодическая очистка истёкших сессий.
@@ -74,6 +84,8 @@ async function main(): Promise<void> {
       clearInterval(purgeTimer);
       await ptz.shutdown((cameraId) => manager.runtimeSession(cameraId));
       await registry.shutdown();
+      audioCapture.shutdown();
+      audioPlayback.shutdown();
       await manager.shutdown();
       await app.close();
       handle.close();

@@ -34,7 +34,10 @@ function errorText(err: unknown): string {
     if (err.code === 'CAMERA_LIMIT_REACHED') {
       return 'Достигнут лимит: платформа поддерживает не более 4 камер. Удалите одну из существующих.';
     }
-    return `${err.code}: ${err.message} (${err.requestId})`;
+    if (err.code === 'CAMERA_ADAPTER_NOT_DETECTED' || err.code === 'CAMERA_UNAVAILABLE') {
+      return err.message;
+    }
+    return `${err.message} (${err.code}, запрос ${err.requestId})`;
   }
   return 'Нет связи с сервером';
 }
@@ -240,7 +243,8 @@ export function CameraNewScreen() {
             <section className={styles.probeBlock}>
               <h3 className={styles.blockTitle}>Возможности</h3>
               <ul className={styles.capList}>
-                <li>Звук: {capabilityLabel(probe.capabilities.audio)}</li>
+                <li>Звук с камеры: {capabilityLabel(probe.capabilities.audio)}</li>
+                <li>Динамик камеры: {capabilityLabel(probe.capabilities.audio_output)}</li>
                 <li>События движения: {capabilityLabel(probe.capabilities.motion_events)}</li>
                 <li>PTZ: {capabilityLabel(probe.capabilities.ptz_continuous)}</li>
                 <li>Пресеты PTZ: {capabilityLabel(probe.capabilities.ptz_presets)}</li>

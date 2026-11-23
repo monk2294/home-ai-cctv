@@ -8,11 +8,15 @@ import type { MediaGatewayClient } from '../src/media/client.js';
 import { EventService } from '../src/events/service.js';
 import { SseHub } from '../src/events/sse.js';
 import { PtzService } from '../src/ptz/service.js';
-import type { OnvifAdapter, OnvifSession, ProbeResult } from '../src/onvif/types.js';
+import type { CameraAdapter, CameraConnection, CameraSession, ProbeResult } from '../src/cameras/adapter.js';
+import { CameraAdapterRegistry } from '../src/cameras/adapter-registry.js';
 
 class FakeMedia implements Partial<MediaGatewayClient> {
   streams = new Map<string, string[]>();
   failNext = false;
+  deleteDelayMs = 0;
+  streamMediasDelayMs = 0;
+  streamMedias = ['video, recvonly, H264', 'audio, recvonly, PCMA/8000'];
 
   async putStream(name: string, sources: string[]): Promise<void> {
     if (this.failNext) {
@@ -23,6 +27,9 @@ class FakeMedia implements Partial<MediaGatewayClient> {
   }
 
   async deleteStream(name: string): Promise<void> {
+    if (this.deleteDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, this.deleteDelayMs));
+    }
     this.streams.delete(name);
   }
 
@@ -37,11 +44,23 @@ class FakeMedia implements Partial<MediaGatewayClient> {
   async getFrame(): Promise<Buffer> {
     return Buffer.from('jpeg');
   }
+
+  async getStreamMedias(): Promise<string[]> {
+    if (this.streamMediasDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, this.streamMediasDelayMs));
+    }
+    return this.streamMedias;
+  }
 }
 
-class FakeOnvifAdapter implements OnvifAdapter {
+class FakeOnvifAdapter implements CameraAdapter {
+  readonly id = 'fake';
+  readonly displayName = 'Fake ONVIF';
   opened = 0;
   failConnect = false;
+  sourceDelayMs = 0;
+  sourceError: Error | null = null;
+  audioOutput: ProbeResult['capabilities']['audio_output'] = 'unsupported';
 
   async probe(): Promise<ProbeResult> {
     if (this.failConnect) {
@@ -52,6 +71,7 @@ class FakeOnvifAdapter implements OnvifAdapter {
       capabilities: {
         video: 'supported',
         audio: 'unsupported',
+        audio_output: this.audioOutput,
         motion_events: 'unknown',
         ptz_continuous: 'supported',
         ptz_presets: 'supported',
@@ -61,13 +81,23 @@ class FakeOnvifAdapter implements OnvifAdapter {
     };
   }
 
-  async open(): Promise<OnvifSession> {
+  async open(conn: CameraConnection): Promise<CameraSession> {
     if (this.failConnect) {
       throw new Error('connect failed');
     }
     this.opened += 1;
+    const source = `rtsp://${encodeURIComponent(conn.username)}:${encodeURIComponent(conn.password)}@${conn.host}/stream1`;
     return {
-      getStreamUri: async () => 'rtsp://192.0.2.10/stream1',
+      getMediaSources: async () => {
+        if (this.sourceDelayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, this.sourceDelayMs));
+        }
+        if (this.sourceError) {
+          throw this.sourceError;
+        }
+        return [source];
+      },
+      getAudioCaptureUri: async () => source,
       ptzContinuousMove: async () => undefined,
       ptzStop: async () => undefined,
       getPtzPresets: async () => [{ token: 'preset1', name: 'Дом' }],
@@ -95,7 +125,7 @@ function buildCtx(): Ctx {
   const media = new FakeMedia();
   const manager = new CameraManager(
     handle,
-    onvif as OnvifAdapter,
+    new CameraAdapterRegistry([onvif]),
     media as unknown as MediaGatewayClient,
     new EventService(handle.db),
     new SseHub(),
@@ -227,6 +257,36 @@ describe('CameraManager', () => {
     assert.deepEqual(presets, [{ token: 'preset1', name: 'Дом' }]);
   });
 
+  test('probe возвращает понятную ошибку, если ни один адаптер не подошёл', async () => {
+    const handle = createDb(':memory:');
+    runMigrations(handle.db);
+    const failing: CameraAdapter = {
+      id: 'failing',
+      displayName: 'Тестовый протокол',
+      probe: async () => { throw new Error('connect failed'); },
+      open: async () => { throw new Error('not used'); },
+    };
+    const manager = new CameraManager(
+      handle,
+      new CameraAdapterRegistry([failing]),
+      new FakeMedia() as unknown as MediaGatewayClient,
+      new EventService(handle.db),
+      new SseHub(),
+      new PtzService(),
+      KEY,
+    );
+    await assert.rejects(
+      manager.probe(CONN),
+      (error: unknown) => {
+        assert.ok(error instanceof ApiError);
+        assert.equal(error.code, 'CAMERA_ADAPTER_NOT_DETECTED');
+        assert.match(error.message, /Проверьте IP-адрес, порт, логин и пароль/);
+        return true;
+      },
+    );
+    handle.close();
+  });
+
   test('probe возвращает профили и возможности без RTSP-URL', async () => {
     const { manager } = ctx();
     const result = await manager.probe({ host: '192.0.2.10', onvifPort: 80, username: 'u', password: 'p' });
@@ -258,6 +318,81 @@ describe('CameraManager', () => {
     await manager.reconcileAll();
     assert.equal(media.streams.has('cam_deadbeefdeadbeefdeadbeefdeadbeef'), false);
     assert.equal(media.streams.has('probe_leftover'), false);
+  });
+
+  test('reconnect сбрасывает устаревший audio_output=supported по новому SDP', async () => {
+    const { manager, onvif, media } = ctx();
+    onvif.audioOutput = 'supported';
+    const camera = await manager.create({ name: 'Backchannel', ...CONN });
+    assert.equal(camera.capabilities.audio_output, 'supported');
+
+    onvif.audioOutput = 'unknown';
+    media.streamMedias = ['video, recvonly, H264', 'audio, recvonly, PCMA/8000'];
+    await manager.reconnect(camera.id);
+    assert.equal(manager.getCamera(camera.id).capabilities.audio_output, 'unsupported');
+  });
+
+  test('disable во время reconcile оставляет камеру disabled', async () => {
+    const { manager, onvif } = ctx();
+    const camera = await manager.create({ name: 'Race', ...CONN, enabled: false });
+    onvif.sourceDelayMs = 50;
+
+    const enabling = manager.update(camera.id, { enabled: true });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const disabling = manager.update(camera.id, { enabled: false });
+    await Promise.all([enabling, disabling]);
+
+    const result = manager.getCamera(camera.id);
+    assert.equal(result.enabled, false);
+    assert.equal(result.state, 'disabled');
+  });
+
+  test('поздняя SDP-проверка не перезаписывает новую попытку и её поток', async () => {
+    const { manager, media } = ctx();
+    const camera = await manager.create({ name: 'Concurrent SDP', ...CONN });
+    media.deleteDelayMs = 80;
+    media.streamMediasDelayMs = 80;
+    media.streamMedias = ['video, recvonly, H264', 'audio, recvonly, PCMA/8000'];
+
+    const first = manager.reconnect(camera.id);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    media.streamMediasDelayMs = 0;
+    media.streamMedias = ['video, recvonly, H264', 'audio, sendonly, PCMA/8000'];
+    const second = manager.reconnect(camera.id);
+    await Promise.all([first, second]);
+
+    assert.equal(manager.getCamera(camera.id).capabilities.audio_output, 'supported');
+    assert.ok(media.streams.has(manager.streamName(camera.id)), 'поток новой попытки должен существовать');
+  });
+
+  test('probeSnapshot отклоняет userinfo в RTSP override', async () => {
+    const { manager } = ctx();
+    await assert.rejects(
+      manager.probeSnapshot({
+        ...CONN,
+        profileToken: 'p1',
+        rtspUrlOverride: 'rtsp://user:pass@192.0.2.10/live',
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof ApiError);
+        assert.equal(error.code, 'VALIDATION_ERROR');
+        return true;
+      },
+    );
+  });
+
+  test('probeSnapshot отдаёт upstream-ошибку адаптера вместо 500', async () => {
+    const { manager, onvif } = ctx();
+    onvif.sourceError = new Error('profile missing');
+    await assert.rejects(
+      manager.probeSnapshot({ ...CONN, profileToken: 'p1' }),
+      (error: unknown) => {
+        assert.ok(error instanceof ApiError);
+        assert.equal(error.code, 'CAMERA_UNAVAILABLE');
+        assert.match(error.message, /Не удалось подключиться к камере/);
+        return true;
+      },
+    );
   });
 
   test('gotoPreset проверяет token по списку пресетов профиля (T-06)', async () => {

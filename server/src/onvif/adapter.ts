@@ -1,48 +1,36 @@
-import { Onvif, OnvifError, Subscription } from 'onvif';
+import { Onvif } from 'onvif';
+import { safeCameraMessage } from '../cameras/adapter.js';
 import type {
+  CameraAdapter,
   CameraCapabilities,
   CameraConnection,
+  CameraSession,
   MediaProfileInfo,
-  OnvifAdapter,
-  OnvifSession,
   ProbeDiagnostic,
   ProbeResult,
   RawCameraEvent,
-} from './types.js';
+} from '../cameras/adapter.js';
 
-/** Топики стандартного движения ONVIF. Неизвестный топик движением не считается. */
-const MOTION_TOPICS = [
-  'tns1:RuleEngine/CellMotionDetector/Motion',
-  'tns1:RuleEngine/MotionRegionDetector/Motion',
-];
-
-export function isMotionTopic(topic: string): boolean {
-  return MOTION_TOPICS.includes(topic);
-}
-
-/** Приводит RawCameraEvent к состоянию движения или null, если событие не про движение. */
-export function normalizeMotion(event: RawCameraEvent): { state: 'active' | 'inactive' } | null {
-  if (!isMotionTopic(event.topic)) {
-    return null;
-  }
-  const value = (event.stateValue ?? '').toLowerCase();
-  if (value === 'true' || value === '1') {
-    return { state: 'active' };
-  }
-  if (value === 'false' || value === '0') {
-    return { state: 'inactive' };
-  }
-  return null;
-}
-
-function createClient(conn: CameraConnection): Onvif {
+export function createOnvifClient(conn: CameraConnection): Onvif {
   return new Onvif({
     hostname: conn.host,
-    port: conn.onvifPort,
+    port: conn.port,
     username: conn.username,
     password: conn.password,
     timeout: conn.timeoutMs,
   });
+}
+
+/** Добавляет учётные данные в RTSP URL. Результат доступен только go2rtc. */
+function withCredentials(uri: string, conn: CameraConnection): string {
+  const parsed = new URL(uri);
+  parsed.username = encodeURIComponent(conn.username);
+  parsed.password = encodeURIComponent(conn.password);
+  return parsed.toString();
+}
+
+function ptzTimeout(timeoutMs: number): string {
+  return `PT${Math.max(1, Math.ceil(timeoutMs / 1000))}S`;
 }
 
 function toProfileInfo(p: {
@@ -68,32 +56,53 @@ function capabilitiesFrom(client: Onvif, hasAudio: boolean): CameraCapabilities 
   return {
     video: hasMedia ? 'supported' : 'unsupported',
     audio: hasMedia ? (hasAudio ? 'supported' : 'unsupported') : 'unsupported',
+    // Backchannel по одному лишь ONVIF-описанию надёжно не определить:
+    // значение уточняется по SDP продюсера go2rtc (reconcileCamera).
+    audio_output: 'unknown',
     motion_events: hasEvents ? 'unknown' : 'unsupported',
     ptz_continuous: hasPtz ? 'supported' : 'unsupported',
     ptz_presets: hasPtz ? 'supported' : 'unsupported',
   };
 }
 
-export class LibOnvifSession implements OnvifSession {
+export class LibOnvifSession implements CameraSession {
   private eventUnsubscribe: (() => void) | null = null;
+  private rtspSource: Promise<string> | null = null;
 
-  constructor(private readonly client: Onvif) {}
+  constructor(
+    protected readonly client: Onvif,
+    protected readonly conn: CameraConnection,
+  ) {}
 
-  async getStreamUri(profileToken: string): Promise<string> {
-    const client = this.client;
-    await client.setActiveMediaProfile(profileToken);
-    if (client.uri.media) {
-      const result = await client.media.getStreamUri({ protocol: 'RTSP' });
-      return result.uri;
-    }
-    return client.media2.getStreamUri({ protocol: 'RtspUnicast' });
+  /** RTSP URL с учётными данными, один раз на сессию. */
+  protected getRtspSource(profileToken: string): Promise<string> {
+    this.rtspSource ??= this.resolveRtspSource(profileToken);
+    return this.rtspSource;
   }
 
-  async ptzContinuousMove(pan: number, tilt: number, zoom: number, _timeoutMs: number): Promise<void> {
-    // Tapo C520WS (firmware 1.3.5) рвёт соединение на параметре Timeout в ContinuousMove.
-    // Сервер сам планирует Stop на тот же срок (D-10), поэтому Timeout камере не передаём.
+  private async resolveRtspSource(profileToken: string): Promise<string> {
+    if (this.conn.rtspUrlOverride) {
+      return withCredentials(this.conn.rtspUrlOverride, this.conn);
+    }
+    await this.client.setActiveMediaProfile(profileToken);
+    const uri = this.client.uri.media
+      ? (await this.client.media.getStreamUri({ protocol: 'RTSP' })).uri
+      : await this.client.media2.getStreamUri({ protocol: 'RtspUnicast' });
+    return withCredentials(uri, this.conn);
+  }
+
+  async getMediaSources(profileToken: string): Promise<string[]> {
+    return [await this.getRtspSource(profileToken)];
+  }
+
+  async getAudioCaptureUri(profileToken: string): Promise<string | null> {
+    return this.getRtspSource(profileToken);
+  }
+
+  async ptzContinuousMove(pan: number, tilt: number, zoom: number, timeoutMs: number): Promise<void> {
     await this.client.ptz.continuousMove({
       velocity: { x: pan, y: tilt, zoom },
+      timeout: ptzTimeout(timeoutMs),
     });
   }
 
@@ -174,10 +183,13 @@ export function extractRawEvent(msg: unknown): RawCameraEvent {
   };
 }
 
-/** Адаптер на библиотеке agsh/onvif. Выбор подтверждается интеграционным тестом T-01/T-07. */
-export class LibOnvifAdapter implements OnvifAdapter {
+/** Общий ONVIF-адаптер. Реестр проверяет его после специализированных адаптеров. */
+export class LibOnvifAdapter implements CameraAdapter {
+  readonly id = 'onvif';
+  readonly displayName = 'ONVIF';
+
   async probe(conn: CameraConnection): Promise<ProbeResult> {
-    const client = createClient(conn);
+    const client = createOnvifClient(conn);
     const diagnostics: ProbeDiagnostic[] = [];
     try {
       await client.connect();
@@ -209,10 +221,10 @@ export class LibOnvifAdapter implements OnvifAdapter {
     }
   }
 
-  async open(conn: CameraConnection): Promise<OnvifSession> {
-    const client = createClient(conn);
+  async open(conn: CameraConnection): Promise<CameraSession> {
+    const client = createOnvifClient(conn);
     await client.connect();
-    return new LibOnvifSession(client);
+    return new LibOnvifSession(client, conn);
   }
 }
 
@@ -220,18 +232,7 @@ async function safeCall<T>(fn: () => Promise<T>, check: string, diagnostics: Pro
   try {
     return await fn();
   } catch (error) {
-    diagnostics.push({ check, status: 'error', message: safeMessage(error) });
+    diagnostics.push({ check, status: 'error', message: safeCameraMessage(error) });
     return null;
   }
-}
-
-/** Очищенное от секретов сообщение об ошибке (NFR-08). */
-export function safeMessage(error: unknown): string {
-  if (error instanceof OnvifError) {
-    return `${error.name}: ${error.message}`.slice(0, 300);
-  }
-  if (error instanceof Error) {
-    return error.message.replace(/\/\/[^/@\s]+@/g, '//***@').slice(0, 300);
-  }
-  return String(error).slice(0, 300);
 }

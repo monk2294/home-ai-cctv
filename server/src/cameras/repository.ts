@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { cameras } from '../db/schema.js';
-import type { CameraCapabilities } from '../onvif/types.js';
+import type { CameraCapabilities } from './adapter.js';
 
 export type CameraState = 'disabled' | 'connecting' | 'online' | 'degraded' | 'offline';
 

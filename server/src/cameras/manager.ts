@@ -3,8 +3,15 @@ import type { DbHandle } from '../db/client.js';
 import { decryptSecret, encryptSecret } from '../db/crypto.js';
 import { cameras, mediaCleanup } from '../db/schema.js';
 import type { MediaGatewayClient } from '../media/client.js';
-import { safeMessage } from '../onvif/adapter.js';
-import type { CameraCapabilities, OnvifAdapter, OnvifSession, ProbeResult } from '../onvif/types.js';
+import {
+  CameraAdapterDetectionError,
+  safeCameraMessage,
+  type CameraCapabilities,
+  type CameraConnection,
+  type CameraSession,
+  type ProbeResult,
+} from './adapter.js';
+import type { CameraAdapterRegistry } from './adapter-registry.js';
 import { CameraRepository, MAX_CAMERAS, probeStreamName, streamNameFor, type CameraRow } from './repository.js';
 import type { EventService } from '../events/service.js';
 import type { SseHub } from '../events/sse.js';
@@ -58,6 +65,7 @@ export interface PublicCamera {
 
 const ONVIF_TIMEOUT_MS = 10_000;
 const PROBE_TTL_MS = 30_000;
+const SNAPSHOT_CACHE_MS = 250;
 
 /** Проверка RTSP override: только rtsp://, без userinfo (раздел 5.1). */
 export function validateRtspOverride(url: string): void {
@@ -78,18 +86,12 @@ export function validateRtspOverride(url: string): void {
   }
 }
 
-/** RTSP-URL с учётными данными внутри — только для внутреннего источника go2rtc, не для логов. */
-function buildRtspSource(uri: string, username: string, password: string): string {
-  const parsed = new URL(uri);
-  parsed.username = encodeURIComponent(username);
-  parsed.password = encodeURIComponent(password);
-  return parsed.toString();
-}
-
 interface CameraRuntime {
-  session: OnvifSession | null;
+  session: CameraSession | null;
   unsubscribeEvents: (() => void) | null;
   probeTimers: Set<NodeJS.Timeout>;
+  /** Источник с учётными данными для захвата входящего звука. */
+  audioCaptureUri: string | null;
 }
 
 /**
@@ -99,10 +101,14 @@ interface CameraRuntime {
 export class CameraManager {
   private readonly repo: CameraRepository;
   private readonly runtimes = new Map<string, CameraRuntime>();
+  private readonly reconcileGeneration = new Map<string, number>();
+  private readonly reconcileQueue = new Map<string, Promise<void>>();
+  private readonly snapInflight = new Map<string, Promise<Buffer>>();
+  private readonly snapCache = new Map<string, { jpeg: Buffer; atMs: number }>();
 
   constructor(
     private readonly handle: DbHandle,
-    private readonly onvif: OnvifAdapter,
+    private readonly adapters: CameraAdapterRegistry,
     private readonly media: MediaGatewayClient,
     private readonly events: EventService,
     private readonly sse: SseHub,
@@ -118,6 +124,7 @@ export class CameraManager {
     let capabilities: CameraCapabilities = {
       video: 'unknown',
       audio: 'unknown',
+      audio_output: 'unknown',
       motion_events: 'unknown',
       ptz_continuous: 'unknown',
       ptz_presets: 'unknown',
@@ -173,58 +180,55 @@ export class CameraManager {
 
   // ---------- probe ----------
 
+  private connection(input: ProbeRequestInput): CameraConnection {
+    return {
+      host: input.host,
+      port: input.onvifPort,
+      username: input.username,
+      password: input.password,
+      timeoutMs: ONVIF_TIMEOUT_MS,
+      rtspUrlOverride: input.rtspUrlOverride ?? null,
+    };
+  }
+
   async probe(input: ProbeRequestInput): Promise<ProbeResult> {
     if (input.rtspUrlOverride != null) {
       validateRtspOverride(input.rtspUrlOverride);
     }
     try {
-      return await this.onvif.probe({
-        host: input.host,
-        onvifPort: input.onvifPort,
-        username: input.username,
-        password: input.password,
-        timeoutMs: ONVIF_TIMEOUT_MS,
-      });
+      return (await this.adapters.select(this.connection(input))).result;
     } catch (error) {
-      throw upstreamError(error);
+      throw adapterError(error);
     }
   }
 
   /** Тестовый снимок до сохранения: временный probe_-поток, удаление в finally. */
   async probeSnapshot(input: ProbeRequestInput & { profileToken: string }, width?: number): Promise<Buffer> {
-    const rtspUri = await this.resolveRtspUri(input, input.profileToken);
-    const name = probeStreamName();
-    try {
-      await this.media.putStream(name, [rtspUri]);
-      return await this.media.getFrame(name, width);
-    } finally {
-      await this.media.deleteStream(name).catch(() => {
-        this.enqueueCleanup(name);
-      });
-    }
-  }
-
-  private async resolveRtspUri(input: ProbeRequestInput, profileToken: string): Promise<string> {
-    if (input.rtspUrlOverride) {
+    if (input.rtspUrlOverride != null) {
       validateRtspOverride(input.rtspUrlOverride);
-      return buildRtspSource(input.rtspUrlOverride, input.username, input.password);
     }
+    const name = probeStreamName();
+    const { session } = await this.adapters
+      .open(this.connection(input))
+      .catch((error: unknown) => { throw adapterError(error); });
     try {
-      const session = await this.onvif.open({
-        host: input.host,
-        onvifPort: input.onvifPort,
-        username: input.username,
-        password: input.password,
-        timeoutMs: ONVIF_TIMEOUT_MS,
-      });
+      const sources = await session
+        .getMediaSources(input.profileToken)
+        .catch((error: unknown) => { throw adapterError(error); });
       try {
-        const uri = await session.getStreamUri(profileToken);
-        return buildRtspSource(uri, input.username, input.password);
+        await this.media
+          .putStream(name, sources)
+          .catch((error: unknown) => { throw mediaError(error); });
+        return await this.media
+          .getFrame(name, width)
+          .catch((error: unknown) => { throw mediaError(error); });
       } finally {
-        await session.close().catch(() => undefined);
+        await this.media.deleteStream(name).catch(() => {
+          this.enqueueCleanup(name);
+        });
       }
-    } catch (error) {
-      throw upstreamError(error);
+    } finally {
+      await session.close().catch(() => undefined);
     }
   }
 
@@ -268,38 +272,31 @@ export class CameraManager {
     let capabilities: CameraCapabilities = {
       video: 'unknown',
       audio: 'unknown',
+      audio_output: 'unknown',
       motion_events: 'unknown',
       ptz_continuous: 'unknown',
       ptz_presets: 'unknown',
     };
     let lastError: string | null = null;
 
-    // Для enabled=true повторно получаем RTSP URI и возможности.
+    // Для enabled=true автоматически выбираем адаптер и проверяем источники.
     if (enabled) {
       try {
-        const session = await this.onvif.open({
-          host: input.host,
-          onvifPort: input.onvifPort,
-          username: input.username,
-          password: input.password,
-          timeoutMs: ONVIF_TIMEOUT_MS,
-        });
+        const conn = this.connection(input);
+        const selected = await this.adapters.select(conn);
+        capabilities = selected.result.capabilities;
+        const session = await selected.adapter.open(conn);
         try {
-          // GetStreamUri — сетевой шаг 3.
-          const probe = await this.onvif.probe({
-            host: input.host,
-            onvifPort: input.onvifPort,
-            username: input.username,
-            password: input.password,
-            timeoutMs: ONVIF_TIMEOUT_MS,
-          });
-          capabilities = probe.capabilities;
-          await session.getStreamUri(input.profileToken);
+          await session.getMediaSources(input.profileToken);
         } finally {
           await session.close().catch(() => undefined);
         }
       } catch (error) {
-        lastError = JSON.stringify({ code: 'ONVIF_UPSTREAM_ERROR', message: safeMessage(error), occurred_at: new Date().toISOString() });
+        lastError = JSON.stringify({
+          code: error instanceof CameraAdapterDetectionError ? 'CAMERA_ADAPTER_NOT_DETECTED' : 'CAMERA_UNAVAILABLE',
+          message: adapterErrorMessage(error),
+          occurred_at: new Date().toISOString(),
+        });
       }
     }
 
@@ -318,9 +315,7 @@ export class CameraManager {
     });
 
     if (enabled) {
-      await this.reconcileCamera(row.id).catch((error: unknown) => {
-        this.setState(row.id, 'offline', error);
-      });
+      await this.reconcileCamera(row.id);
     }
     return this.getCamera(row.id);
   }
@@ -351,7 +346,7 @@ export class CameraManager {
     if (disabling) {
       this.stopRuntime(id);
       this.ptz.stopBestEffort(id, () => this.runtimeSession(id));
-      this.removeStreamOrEnqueue(id);
+      await this.removeStreamOrEnqueue(id);
     }
 
     const passwordEnc = input.password && input.password.length > 0
@@ -380,14 +375,10 @@ export class CameraManager {
     }
 
     if (enabling) {
-      await this.reconcileCamera(id).catch((error: unknown) => {
-        this.setState(id, 'offline', error);
-      });
+      await this.reconcileCamera(id);
     } else if (!disabling && row.enabled && connectionChanged) {
       this.stopRuntime(id);
-      await this.reconcileCamera(id).catch((error: unknown) => {
-        this.setState(id, 'offline', error);
-      });
+      await this.reconcileCamera(id);
     }
     return this.getCamera(id);
   }
@@ -397,7 +388,7 @@ export class CameraManager {
     void row;
     this.stopRuntime(id);
     this.ptz.stopBestEffort(id, () => this.runtimeSession(id));
-    this.removeStreamOrEnqueue(id);
+    await this.removeStreamOrEnqueue(id);
     this.repo.delete(id);
   }
 
@@ -409,9 +400,7 @@ export class CameraManager {
     }
     this.stopRuntime(id);
     this.ptz.stopBestEffort(id, () => this.runtimeSession(id));
-    await this.reconcileCamera(id).catch((error: unknown) => {
-      this.setState(id, 'offline', error);
-    });
+    await this.reconcileCamera(id);
     return this.getCamera(id);
   }
 
@@ -421,17 +410,48 @@ export class CameraManager {
     return streamNameFor(id);
   }
 
-  /** JPEG для администратора и ИИ: общий путь к go2rtc. */
+  /** JPEG для администратора и ИИ: общий путь к go2rtc.
+   * Одинаковые одновременные запросы объединяются в один вызов go2rtc;
+   * готовый кадр переиспользуется не дольше 250 мс (спецификация 50, снапшоты 1 с).
+   * Дисковый кэш запрещён. */
   async snapshot(id: string, width?: number): Promise<Buffer> {
     const row = this.requireCamera(id);
     if (!row.enabled) {
       throw new ApiError(409, 'CAMERA_DISABLED', 'Камера отключена');
     }
-    try {
-      return await this.media.getFrame(this.streamName(id), width);
-    } catch (error) {
-      throw mediaError(error);
+    const key = `${id}:${width ?? 0}`;
+    const cached = this.snapCache.get(key);
+    if (cached && Date.now() - cached.atMs < SNAPSHOT_CACHE_MS) {
+      return cached.jpeg;
     }
+    const inflight = this.snapInflight.get(key);
+    if (inflight) {
+      return inflight;
+    }
+    const pending = this.media
+      .getFrame(this.streamName(id), width)
+      .then((jpeg) => {
+        this.snapCache.set(key, { jpeg, atMs: Date.now() });
+        return jpeg;
+      })
+      .catch((error: unknown) => {
+        throw mediaError(error);
+      })
+      .finally(() => {
+        this.snapInflight.delete(key);
+      });
+    this.snapInflight.set(key, pending);
+    return pending;
+  }
+
+  /** Информация для звуковых сервисов: состояние, возможности, RTSP-источник из памяти. */
+  audioInfoFor(id: string): { enabled: boolean; capabilities: CameraCapabilities; audioCaptureUri: string | null } {
+    const row = this.requireCamera(id);
+    return {
+      enabled: row.enabled,
+      capabilities: this.toPublic(row).capabilities,
+      audioCaptureUri: this.runtimes.get(id)?.audioCaptureUri ?? null,
+    };
   }
 
   /** Playback descriptors (раздел 9.4): same-origin relative URLs. */
@@ -460,7 +480,7 @@ export class CameraManager {
 
   // ---------- PTZ ----------
 
-  runtimeSession(id: string): OnvifSession | null {
+  runtimeSession(id: string): CameraSession | null {
     return this.runtimes.get(id)?.session ?? null;
   }
 
@@ -568,112 +588,230 @@ export class CameraManager {
     }
 
     for (const camera of enabled) {
-      await this.reconcileCamera(camera.id).catch((error: unknown) => {
-        this.setState(camera.id, 'offline', error);
-      });
+      await this.reconcileCamera(camera.id);
     }
 
     await this.processCleanupQueue().catch(() => undefined);
   }
 
-  /** Reconciliation одной камеры: поток go2rtc + ONVIF-сессия + подписки. */
+  /** Сериализует попытки одной камеры: старая и новая не владеют потоком одновременно. */
   private async reconcileCamera(id: string): Promise<void> {
+    const previous = this.reconcileQueue.get(id) ?? Promise.resolve();
+    const current = previous.then(
+      () => this.runReconcile(id),
+      () => this.runReconcile(id),
+    );
+    this.reconcileQueue.set(id, current);
+    try {
+      await current;
+    } finally {
+      if (this.reconcileQueue.get(id) === current) {
+        this.reconcileQueue.delete(id);
+      }
+    }
+  }
+
+  /** Запускает попытку Reconciliation и записывает ошибку только для неё. */
+  private async runReconcile(id: string): Promise<void> {
     const row = this.repo.get(id);
     if (!row || !row.enabled) {
       return;
     }
+    const generation = this.beginReconcile(id);
     this.repo.update(id, { state: 'connecting' });
+    try {
+      await this.reconcileCameraAttempt(id, generation);
+    } catch (error) {
+      if (this.reconcileIsCurrent(id, generation)) {
+        this.setState(id, 'offline', error);
+      }
+    }
+  }
+
+  /** Reconciliation одной камеры: автоматический адаптер, поток go2rtc и подписки. */
+  private async reconcileCameraAttempt(id: string, generation: number): Promise<void> {
+    const row = this.repo.get(id);
+    if (!row || !row.enabled) {
+      return;
+    }
 
     const password = decryptSecret(row.passwordEnc, this.cameraKey);
     const rtspOverride = row.rtspOverrideEnc ? decryptSecret(row.rtspOverrideEnc, this.cameraKey) : null;
-    const conn = { host: row.host, onvifPort: row.onvifPort, username: row.username, password, timeoutMs: ONVIF_TIMEOUT_MS };
-
-    // 1. Поток go2rtc (опционально RTSP override без ONVIF).
-    let rtspUri: string;
-    let session: OnvifSession | null = null;
-    if (rtspOverride) {
-      rtspUri = buildRtspSource(rtspOverride, row.username, password);
-    } else {
-      session = await this.onvif.open(conn);
-      try {
-        rtspUri = buildRtspSource(await session.getStreamUri(row.profileToken), row.username, password);
-      } catch (error) {
-        await session.close().catch(() => undefined);
-        throw error;
-      }
+    const conn: CameraConnection = {
+      host: row.host,
+      port: row.onvifPort,
+      username: row.username,
+      password,
+      timeoutMs: ONVIF_TIMEOUT_MS,
+      rtspUrlOverride: rtspOverride,
+    };
+    const { session, selected } = await this.adapters.open(conn);
+    if (!this.reconcileIsCurrent(id, generation)) {
+      await session.close().catch(() => undefined);
+      return;
     }
-
+    let sources: string[];
+    let audioCaptureUri: string | null;
     try {
-      await this.media.putStream(this.streamName(id), [rtspUri]);
-    } catch (error) {
-      if (session) {
+      sources = await session.getMediaSources(row.profileToken);
+      audioCaptureUri = await session.getAudioCaptureUri(row.profileToken);
+      if (!this.reconcileIsCurrent(id, generation)) {
         await session.close().catch(() => undefined);
+        return;
       }
-      // Камера сохранена, состояние degraded/connecting — backoff повторит (раздел 5.2).
-      this.repo.update(id, { state: 'degraded', lastError: JSON.stringify({ code: 'MEDIA_GATEWAY_UNAVAILABLE', message: safeMessage(error), occurred_at: new Date().toISOString() }) });
+      await this.media.putStream(this.streamName(id), sources);
+    } catch (error) {
+      await session.close().catch(() => undefined);
       throw error;
     }
-
-    // 2. ONVIF-сессия и подписки (без собственного getStreamUri при override).
-    if (session) {
-      const runtime = this.ensureRuntime(id);
-      runtime.session = session;
-      runtime.unsubscribeEvents = session.onEvent((raw) => {
-        const stored = this.events.handleRawEvent(id, raw);
-        if (stored.inserted && stored.event) {
-          this.handle.db
-            .update(cameras)
-            .set({ lastEventAt: stored.event.received_at })
-            .where(eq(cameras.id, id))
-            .run();
-          // Первое подтверждённое событие движения уточняет capability (раздел 6.1).
-          const current = this.repo.get(id);
-          if (current) {
-            const capabilities = this.toPublic(current).capabilities;
-            if (capabilities.motion_events === 'unknown') {
-              this.repo.update(id, { capabilities: { ...capabilities, motion_events: 'supported' } });
-            }
-          }
-          this.sse.broadcast(stored.event);
-        }
-      });
-      this.repo.update(id, { state: 'online', lastSeenAt: new Date().toISOString(), lastError: null });
-    } else {
-      this.repo.update(id, { state: 'degraded', lastSeenAt: new Date().toISOString() });
+    if (!this.reconcileIsCurrent(id, generation)) {
+      await session.close().catch(() => undefined);
+      await this.removeStreamOrEnqueue(id);
+      return;
     }
+
+    const current = this.repo.get(id);
+    if (current) {
+      const known = this.toPublic(current).capabilities;
+      const probed = selected.result.capabilities;
+      this.repo.update(id, {
+        capabilities: {
+          video: probed.video === 'unknown' ? known.video : probed.video,
+          audio: probed.audio === 'unknown' ? known.audio : probed.audio,
+          // Специализированный адаптер знает динамик; общий ONVIF — неизвестно,
+          // затем SDP уточняет состояние заново, без устаревшего supported.
+          audio_output: probed.audio_output,
+          motion_events: probed.motion_events === 'unknown' ? known.motion_events : probed.motion_events,
+          ptz_continuous: probed.ptz_continuous === 'unknown' ? known.ptz_continuous : probed.ptz_continuous,
+          ptz_presets: probed.ptz_presets === 'unknown' ? known.ptz_presets : probed.ptz_presets,
+        },
+      });
+    }
+    await this.refineAudioOutput(id, generation).catch(() => undefined);
+    if (!this.reconcileIsCurrent(id, generation)) {
+      await session.close().catch(() => undefined);
+      await this.removeStreamOrEnqueue(id);
+      return;
+    }
+
+    // Источники с учётными данными остаются только в памяти и go2rtc.
+    const runtime = this.ensureRuntime(id);
+    runtime.session = session;
+    runtime.audioCaptureUri = audioCaptureUri;
+    runtime.unsubscribeEvents = session.onEvent((raw) => {
+      const stored = this.events.handleRawEvent(id, raw);
+      if (stored.inserted && stored.event) {
+        this.handle.db
+          .update(cameras)
+          .set({ lastEventAt: stored.event.received_at })
+          .where(eq(cameras.id, id))
+          .run();
+        // Первое подтверждённое событие движения уточняет capability (раздел 6.1).
+        const current = this.repo.get(id);
+        if (current) {
+          const capabilities = this.toPublic(current).capabilities;
+          if (capabilities.motion_events === 'unknown') {
+            this.repo.update(id, { capabilities: { ...capabilities, motion_events: 'supported' } });
+          }
+        }
+        this.sse.broadcast(stored.event);
+      }
+    });
+    const state: CameraRow['state'] = rtspOverride ? 'degraded' : 'online';
+    this.repo.update(id, { state, lastSeenAt: new Date().toISOString(), lastError: null });
+  }
+
+  private beginReconcile(id: string): number {
+    const generation = (this.reconcileGeneration.get(id) ?? 0) + 1;
+    this.reconcileGeneration.set(id, generation);
+    return generation;
+  }
+
+  private reconcileIsCurrent(id: string, generation: number): boolean {
+    const row = this.repo.get(id);
+    return row?.enabled === true && this.reconcileGeneration.get(id) === generation;
   }
 
   private ensureRuntime(id: string): CameraRuntime {
     let runtime = this.runtimes.get(id);
     if (!runtime) {
-      runtime = { session: null, unsubscribeEvents: null, probeTimers: new Set() };
+      runtime = { session: null, unsubscribeEvents: null, probeTimers: new Set(), audioCaptureUri: null };
       this.runtimes.set(id, runtime);
     }
     return runtime;
   }
 
-  private stopRuntime(id: string): void {
-    const runtime = this.runtimes.get(id);
-    if (!runtime) {
+  /**
+   * Уточнение audio_output по медиасписанию продюсера go2rtc:
+   * "audio, sendonly"/"sendrecv" — backchannel есть, только recvonly — динамика нет.
+   */
+  private async refineAudioOutput(id: string, generation: number): Promise<void> {
+    const before = this.repo.get(id);
+    if (!before) {
       return;
     }
-    this.runtimes.delete(id);
-    runtime.unsubscribeEvents?.();
-    for (const timer of runtime.probeTimers) {
-      clearTimeout(timer);
+    if (this.toPublic(before).capabilities.audio_output === 'supported') {
+      return;
     }
-    void runtime.session?.close().catch(() => undefined);
+    const medias = await this.media.getStreamMedias(this.streamName(id));
+    if (!medias || !this.reconcileIsCurrent(id, generation)) {
+      return;
+    }
+    const audioTracks = medias.filter((media) => media.startsWith('audio'));
+    if (audioTracks.length === 0) {
+      return;
+    }
+    // Перечитываем capabilities после await: новая попытка могла уже обновить их.
+    const current = this.repo.get(id);
+    if (!current) {
+      return;
+    }
+    const capabilities = this.toPublic(current).capabilities;
+    if (capabilities.audio_output === 'supported') {
+      return;
+    }
+    const state: CameraCapabilities['audio_output'] =
+      audioTracks.some((media) => media.includes('sendonly') || media.includes('sendrecv')) ? 'supported' : 'unsupported';
+    if (capabilities.audio_output !== state) {
+      this.repo.update(id, { capabilities: { ...capabilities, audio_output: state } });
+    }
+  }
+
+  private stopRuntime(id: string): void {
+    this.beginReconcile(id);
+    const runtime = this.runtimes.get(id);
+    if (runtime) {
+      this.runtimes.delete(id);
+      runtime.unsubscribeEvents?.();
+      for (const timer of runtime.probeTimers) {
+        clearTimeout(timer);
+      }
+      void runtime.session?.close().catch(() => undefined);
+    }
+    for (const key of [...this.snapCache.keys()]) {
+      if (key.startsWith(`${id}:`)) {
+        this.snapCache.delete(key);
+      }
+    }
   }
 
   private setState(id: string, state: CameraRow['state'], error: unknown): void {
+    const current = this.repo.get(id);
+    if (!current || (!current.enabled && state !== 'disabled')) {
+      return;
+    }
     this.repo.update(id, {
       state,
-      lastError: JSON.stringify({ code: 'ONVIF_UPSTREAM_ERROR', message: safeMessage(error), occurred_at: new Date().toISOString() }),
+      lastError: JSON.stringify({
+        code: error instanceof CameraAdapterDetectionError ? 'CAMERA_ADAPTER_NOT_DETECTED' : 'CAMERA_UNAVAILABLE',
+        message: adapterErrorMessage(error),
+        occurred_at: new Date().toISOString(),
+      }),
     });
   }
 
-  private removeStreamOrEnqueue(id: string): void {
-    this.media.deleteStream(this.streamName(id)).catch(() => {
+  private async removeStreamOrEnqueue(id: string): Promise<void> {
+    await this.media.deleteStream(this.streamName(id)).catch(() => {
       this.enqueueCleanup(this.streamName(id));
     });
   }
@@ -715,12 +853,38 @@ export class CameraManager {
   }
 }
 
+function adapterErrorMessage(error: unknown): string {
+  if (error instanceof CameraAdapterDetectionError) {
+    return error.message;
+  }
+  if (error instanceof Error && error.name.toLowerCase().includes('timeout')) {
+    return 'Камера не ответила за отведённое время. Проверьте сеть и адрес камеры.';
+  }
+  return 'Не удалось подключиться к камере. Проверьте адрес, порт, логин и пароль.';
+}
+
+function adapterError(error: unknown): ApiError {
+  if (error instanceof CameraAdapterDetectionError) {
+    return new ApiError(422, 'CAMERA_ADAPTER_NOT_DETECTED', error.message, { attempts: error.attempts });
+  }
+  if (error instanceof Error && error.name.toLowerCase().includes('timeout')) {
+    return new ApiError(504, 'MEDIA_TIMEOUT', 'Камера не ответила за отведённое время. Проверьте сеть и адрес камеры.');
+  }
+  return new ApiError(
+    502,
+    'CAMERA_UNAVAILABLE',
+    'Не удалось подключиться к камере. Проверьте адрес, порт, логин и пароль.',
+  );
+}
+
 function upstreamError(error: unknown): ApiError {
-  const message = safeMessage(error);
+  if (error instanceof CameraAdapterDetectionError) {
+    return adapterError(error);
+  }
   const isTimeout = error instanceof Error && error.name.toLowerCase().includes('timeout');
   return isTimeout
-    ? new ApiError(504, 'ONVIF_TIMEOUT', 'Таймаут ONVIF-запроса')
-    : new ApiError(502, 'ONVIF_UPSTREAM_ERROR', message);
+    ? new ApiError(504, 'MEDIA_TIMEOUT', 'Камера не ответила за отведённое время')
+    : new ApiError(502, 'CAMERA_UNAVAILABLE', adapterErrorMessage(error));
 }
 
 function mediaError(error: unknown): ApiError {
@@ -731,5 +895,5 @@ function mediaError(error: unknown): ApiError {
   if (e?.status === 'unavailable') {
     return new ApiError(503, 'CAMERA_MEDIA_UNAVAILABLE', 'Медиапоток камеры недоступен');
   }
-  return new ApiError(502, 'MEDIA_UPSTREAM_ERROR', safeMessage(error));
+  return new ApiError(502, 'MEDIA_UPSTREAM_ERROR', safeCameraMessage(error));
 }
