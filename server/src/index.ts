@@ -35,7 +35,7 @@ async function main(): Promise<void> {
     const mediaClient = new MediaGatewayClient(config.mediaApiBaseUrl);
     const cameraKey = Buffer.from(config.cameraEncryptionKeyB64, 'base64');
 
-    const events = new EventService(handle.db);
+    const events = new EventService(handle.db, config.eventRetentionPerCamera);
     const sse = new SseHub();
     const ptz = new PtzService();
     const registry = new AiStreamRegistry(mediaClient);
@@ -50,6 +50,7 @@ async function main(): Promise<void> {
       sse,
       ptz,
       cameraKey,
+      config.maxCameras,
     );
     const openMjpeg = createMjpegHandler(manager, mediaClient, registry);
     const audioCapture = new AudioCaptureService(manager);

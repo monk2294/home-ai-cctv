@@ -75,7 +75,9 @@ config/
 | `ADMIN_PASSWORD_FILE` | Пароль только для первичного bootstrap |
 | `AI_API_TOKEN_FILE` | Bearer-токен ИИ |
 | `CAMERA_ENCRYPTION_KEY_FILE` | Ключ секретов камер |
-| `DATABASE_URL` | Путь SQLite внутри server-data |
+| `DATABASE_PATH` | Путь SQLite внутри server-data |
+| `MAX_CAMERAS` | Положительный целый лимит камер, по умолчанию 4 |
+| `EVENT_RETENTION_PER_CAMERA` | Положительный целый лимит событий на камеру, по умолчанию 1000 |
 | `MEDIA_API_BASE_URL` | Внутренний URL go2rtc |
 | `WEBRTC_LAN_CANDIDATE` | LAN IP сервера для WebRTC |
 | `WEBRTC_PUBLIC_CANDIDATE` | Внешний host:port при поддержке tunnel |

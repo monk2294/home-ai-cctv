@@ -1,4 +1,5 @@
 import { eq } from 'drizzle-orm';
+import { DEFAULT_MAX_CAMERAS } from '../config.js';
 import type { DbHandle } from '../db/client.js';
 import { decryptSecret, encryptSecret } from '../db/crypto.js';
 import { cameras, mediaCleanup } from '../db/schema.js';
@@ -12,7 +13,7 @@ import {
   type ProbeResult,
 } from './adapter.js';
 import type { CameraAdapterRegistry } from './adapter-registry.js';
-import { CameraRepository, MAX_CAMERAS, probeStreamName, streamNameFor, type CameraRow } from './repository.js';
+import { CameraRepository, probeStreamName, streamNameFor, type CameraRow } from './repository.js';
 import type { EventService } from '../events/service.js';
 import type { SseHub } from '../events/sse.js';
 import type { PtzService } from '../ptz/service.js';
@@ -114,6 +115,7 @@ export class CameraManager {
     private readonly sse: SseHub,
     private readonly ptz: PtzService,
     private readonly cameraKey: Buffer,
+    private readonly maxCameras = DEFAULT_MAX_CAMERAS,
   ) {
     this.repo = new CameraRepository(handle.db);
   }
@@ -255,8 +257,8 @@ export class CameraManager {
     if (input.rtspUrlOverride != null) {
       validateRtspOverride(input.rtspUrlOverride);
     }
-    if (this.repo.count() >= MAX_CAMERAS) {
-      throw new ApiError(409, 'CAMERA_LIMIT_REACHED', `Лимит камер: ${MAX_CAMERAS}`);
+    if (this.repo.count() >= this.maxCameras) {
+      throw new ApiError(409, 'CAMERA_LIMIT_REACHED', `Лимит камер: ${this.maxCameras}`);
     }
     const name = input.name.trim();
     if (this.repo.isNameTaken(name)) {
