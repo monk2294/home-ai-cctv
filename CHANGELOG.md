@@ -4,10 +4,11 @@
 
 ## [Unreleased]
 
-## [0.2.2] - 2026-11-23
+## [0.3.0] - 2026-11-23
 
 ### Изменено
 
+- Первый release в новом репозитории; нумерация продолжена с 0.2.1.
 - Скриншоты и CSV проверок исключены из репозитория; каталог `docs/evidence/` добавлен в `.gitignore`.
 - Документация не содержит адресов локальной сети, локальных путей и серийных данных.
 - Метаданные коммитов приведены к одному автору.
@@ -47,5 +48,5 @@
 - Docker Compose, backup, restore и verification scripts.
 - Лицензия MIT.
 
-[Unreleased]: https://github.com/monk2294/home-ai-cctv/compare/v0.2.2...HEAD
-[0.2.2]: https://github.com/monk2294/home-ai-cctv/releases/tag/v0.2.2
+[Unreleased]: https://github.com/monk2294/home-ai-cctv/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/monk2294/home-ai-cctv/releases/tag/v0.3.0

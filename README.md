@@ -20,7 +20,7 @@
 1. Скачайте tag релиза:
 
    ```bash
-   git clone --branch v0.2.2 --depth 1 https://github.com/monk2294/home-ai-cctv.git
+   git clone --branch v0.3.0 --depth 1 https://github.com/monk2294/home-ai-cctv.git
    cd home-ai-cctv
    ```
 
@@ -35,7 +35,7 @@
 
    ```dotenv
    IMAGE_PREFIX=ghcr.io/monk2294/home-ai-cctv
-   IMAGE_TAG=0.2.2
+   IMAGE_TAG=0.3.0
    ```
 
 4. Скачайте и запустите versioned images:

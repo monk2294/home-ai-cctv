@@ -1,6 +1,6 @@
 {
   "name": "@home-ai-cctv/server",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Сервер управления камерами, авторизацией, событиями и API.",
