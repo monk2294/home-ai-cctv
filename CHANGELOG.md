@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-23
+
+### Безопасность
+
+- Глобальный HTTP rate limit по IP: 1200 запросов в минуту по умолчанию.
+- `HTTP_RATE_LIMIT_PER_MINUTE` меняет лимит; 429 использует `RATE_LIMIT_EXCEEDED` и общую схему `Error`.
+- Документированы пять ложных или требующих совместимости CodeQL alerts без глобального отключения правил.
+
 ## [0.2.0] - 2026-11-23
 
 ### Добавлено
@@ -31,6 +39,7 @@
 - Docker Compose, backup, restore и verification scripts.
 - Лицензия MIT.
 
-[Unreleased]: https://github.com/monk2294/home-ai-cctv/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/monk2294/home-ai-cctv/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/monk2294/home-ai-cctv/releases/tag/v0.2.1
 [0.2.0]: https://github.com/monk2294/home-ai-cctv/releases/tag/v0.2.0
 [0.1.0]: https://github.com/monk2294/home-ai-cctv/releases/tag/v0.1.0

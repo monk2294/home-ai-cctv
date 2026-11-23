@@ -314,6 +314,7 @@ Probe не создаёт постоянный поток и не сохраня
 - Мутирующие cookie-запросы проверяют `Origin`, если браузер его отправил.
 - Неверный логин и неверная сессия возвращают одинаковый общий `401` без раскрытия причины.
 - Сервер ограничивает число неудачных попыток входа по IP и времени.
+- Глобальный HTTP limit по умолчанию принимает 1200 запросов на IP в минуту. `HTTP_RATE_LIMIT_PER_MINUTE` меняет значение. Превышение возвращает 429 `RATE_LIMIT_EXCEEDED` в общей схеме `Error`. Отдельный login limit сохраняет 5 ошибок за 5 минут.
 
 ## 9. Медиа-API
 
@@ -433,7 +434,7 @@ SQLite использует:
 | 413 | `AUDIO_TOO_LARGE` |
 | 415 | `UNSUPPORTED_AUDIO_FORMAT` |
 | 422 | Ошибка JSON Schema/Ajv-валидации, `CAMERA_ADAPTER_NOT_DETECTED`, `INVALID_AUDIO` или `AUDIO_DURATION_LIMIT_EXCEEDED` в единой обёртке `Error` |
-| 429 | `TOO_MANY_LOGIN_ATTEMPTS` |
+| 429 | `TOO_MANY_LOGIN_ATTEMPTS`, `RATE_LIMIT_EXCEEDED` |
 | 502 | `ONVIF_UPSTREAM_ERROR`, `MEDIA_UPSTREAM_ERROR` |
 | 503 | `CAMERA_MEDIA_UNAVAILABLE`, `MEDIA_GATEWAY_UNAVAILABLE` |
 | 504 | `ONVIF_TIMEOUT`, `MEDIA_TIMEOUT` |

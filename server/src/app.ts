@@ -1,4 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
+import rateLimit from '@fastify/rate-limit';
+import { DEFAULT_HTTP_RATE_LIMIT_PER_MINUTE } from './config.js';
 import type { DbHandle } from './db/client.js';
 import type { AuthService } from './auth/service.js';
 import { requireAdmin } from './auth/guards.js';
@@ -30,6 +32,7 @@ export interface AppDeps {
   sessionCookieSecure: boolean;
   logLevel: 'debug' | 'info' | 'warn' | 'error';
   loggerEnabled?: boolean;
+  rateLimitPerMinute?: number;
   migrationsDone: () => boolean;
   media: MediaGatewayChecker;
   cameras?: {
@@ -56,6 +59,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   registerRequestId(app);
   registerErrorHandler(app);
+  await app.register(rateLimit, {
+    max: deps.rateLimitPerMinute ?? DEFAULT_HTTP_RATE_LIMIT_PER_MINUTE,
+    timeWindow: 60_000,
+    errorResponseBuilder: (request) => ({
+      code: 'RATE_LIMIT_EXCEEDED',
+      message: 'Слишком много запросов. Повторите позже.',
+      request_id: request.requestId,
+    }),
+  });
 
   // Аудиофайлы парсятся как Buffer; точный формат проверяет аудиомаршрут (415).
   for (const audioType of [
