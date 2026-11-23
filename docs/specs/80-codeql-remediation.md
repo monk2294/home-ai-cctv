@@ -23,14 +23,14 @@
 
 | Alert | Правило | Решение |
 |---|---|---|
-| #1 Tapo Digest MD5 | `js/weak-cryptographic-algorithm` | Точечное suppression: камера требует HTTP Digest MD5; заменить протокол нельзя |
+| #1 Tapo Digest MD5 | `js/weak-cryptographic-algorithm` | GitHub dismissal: камера требует HTTP Digest MD5; заменить протокол нельзя |
 | #2 Admin route group | `js/missing-rate-limiting` | Исправить глобальным `@fastify/rate-limit` |
 | #3 Login | `js/missing-rate-limiting` | Исправить глобальным limit; отдельный login limit сохраняется |
 | #4 Caddy forward_auth | `js/missing-rate-limiting` | Исправить тем же глобальным limit |
-| #5 PTZ timer | `js/resource-exhaustion` | Точечное suppression: `PtzService.validate` ограничивает duration 100–5000 мс |
-| #6 MCP Bearer | `js/insufficient-password-hash` | Точечное suppression: SHA-256 нормализует высокоэнтропийный token для timing-safe comparison, это не password hash |
-| #7 Session/Bearer tokens | `js/insufficient-password-hash` | Точечное suppression: случайные 256-битные tokens не требуют Argon2 |
-| #8 Tapo password derivation | `js/insufficient-password-hash` | Точечное suppression: это обязательный Digest derivation, не хранение пароля |
+| #5 PTZ timer | `js/resource-exhaustion` | GitHub dismissal: `PtzService.validate` ограничивает duration 100–5000 мс |
+| #6 MCP Bearer | `js/insufficient-password-hash` | GitHub dismissal: SHA-256 нормализует высокоэнтропийный token для timing-safe comparison, это не password hash |
+| #7 Session/Bearer tokens | `js/insufficient-password-hash` | GitHub dismissal: случайные 256-битные tokens не требуют Argon2 |
+| #8 Tapo password derivation | `js/insufficient-password-hash` | GitHub dismissal: это обязательный Digest derivation, не хранение пароля |
 
 ## Решения
 
@@ -52,3 +52,4 @@
 ## Обновления
 
 - 2026-11-23 — Начат анализ восьми alerts после первого scan merge commit `c3f526a`.
+- 2026-11-23 — Inline comments не устранили findings и были удалены. Пять оставшихся alerts закрыты через GitHub с причинами и dismissal comments. Code scanning показывает 0 Open.

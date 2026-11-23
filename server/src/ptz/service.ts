@@ -58,7 +58,6 @@ export class PtzService {
     if (previous) {
       clearTimeout(previous.timer);
     }
-    // codeql[js/resource-exhaustion]: PtzService.validate ограничивает durationMs диапазоном 100–5000 мс.
     const timer = setTimeout(() => {
       const current = this.active.get(cameraId);
       if (current?.generation === generation) {

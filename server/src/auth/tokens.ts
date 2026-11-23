@@ -14,9 +14,7 @@ export function hashToken(token: string): string {
 
 /** Сравнивает Bearer-токен с ожидаемым за постоянное время (раздел 8.2). */
 export function tokensEqual(provided: string, expected: string): boolean {
-  // codeql[js/insufficient-password-hash]: SHA-256 применяется к высокоэнтропийному token, а не к паролю.
   const a = createHash('sha256').update(provided, 'utf8').digest();
-  // codeql[js/insufficient-password-hash]: Hash нужен для timing-safe comparison одинаковой длины, не для password storage.
   const b = createHash('sha256').update(expected, 'utf8').digest();
   return timingSafeEqual(a, b);
 }
