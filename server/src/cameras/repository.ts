@@ -58,9 +58,6 @@ export interface CameraInsert {
   lastError?: string | null;
 }
 
-export const MAX_CAMERAS = 4;
-const EVENT_RETENTION_PER_CAMERA = 1000;
-
 function toRow(raw: CameraRowRaw): CameraRow {
   return { ...raw, enabled: raw.enabled === 1, state: raw.state as CameraState };
 }
@@ -162,10 +159,6 @@ export class CameraRepository {
       .orderBy(desc(sql`id`))
       .limit(limit)
       .all();
-  }
-
-  static eventRetention(): number {
-    return EVENT_RETENTION_PER_CAMERA;
   }
 }
 

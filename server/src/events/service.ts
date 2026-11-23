@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { and, asc, desc, eq, gt, sql } from 'drizzle-orm';
+import { DEFAULT_EVENT_RETENTION_PER_CAMERA } from '../config.js';
 import type { Db } from '../db/client.js';
 import { cameraEvents } from '../db/schema.js';
 import type { RawCameraEvent } from '../cameras/adapter.js';
@@ -16,8 +17,6 @@ export interface CameraEvent {
   topic: string;
 }
 
-const RETENTION = 1000;
-
 /** SHA-256 от канонической комбинации для дедупликации повторной доставки PullMessages. */
 export function dedupHash(cameraId: string, topic: string, state: string, occurredAt: string, messageId: string | null): string {
   return createHash('sha256')
@@ -32,7 +31,10 @@ export interface StoredEvent {
 
 /** Нормализация, дедупликация, хранение и retention событий (спецификация 10, раздел 6.3). */
 export class EventService {
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly db: Db,
+    private readonly retention = DEFAULT_EVENT_RETENTION_PER_CAMERA,
+  ) {}
 
   handleRawEvent(cameraId: string, raw: RawCameraEvent): StoredEvent {
     const motion = normalizeMotion(raw);
@@ -76,7 +78,7 @@ export class EventService {
         .from(cameraEvents)
         .where(eq(cameraEvents.dedupHash, hash))
         .all()[0] as { id: number } | undefined;
-      // Retention: не более RETENTION событий на камеру.
+      // Retention: не более заданного числа событий на камеру.
       tx.run(sql`
         DELETE FROM camera_events
         WHERE camera_id = ${cameraId}
@@ -84,7 +86,7 @@ export class EventService {
             SELECT id FROM camera_events
             WHERE camera_id = ${cameraId}
             ORDER BY id DESC
-            LIMIT ${RETENTION}
+            LIMIT ${this.retention}
           )
       `);
       if (!row) {

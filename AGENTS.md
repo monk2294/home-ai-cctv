@@ -32,10 +32,11 @@ Local IP-camera platform: Node.js 22 + Fastify + SQLite (Drizzle) server, React 
 - `./scripts/verify-tunnel.sh <https-base>` — T-15 network experiment through OpenTunnel (spec 30 §8.2), ~5 min
 - `node scripts/load-test.mjs [minutes]` — T-17 load run: 2 Firefox viewers + 1 MJPEG consumer per camera, RSS/fd sampling, CSV in `docs/evidence/`
 - `./scripts/init-secrets.sh && docker compose build && docker compose up -d`
+- `git tag vX.Y.Z && git push origin vX.Y.Z` — release workflow verifies the tag, publishes versioned GHCR images and creates a GitHub Release; package versions and `IMAGE_TAG` must match first
 
 ## Conventions
 
-- Node.js pinned in `.nvmrc` and Dockerfiles; all dependency versions exact (no ranges, no `latest` images). Server production image pins `ffmpeg=7:5.1.9-0+deb12u1` (Debian bookworm) for the audio services.
+- Node.js pinned in `.nvmrc` and Dockerfiles; all dependency versions exact (no ranges, no `latest` images). GitHub Actions use full commit SHAs. Compose selects local or GHCR images through `IMAGE_PREFIX` and `IMAGE_TAG`. Server production image pins `ffmpeg=7:5.1.9-0+deb12u1` (Debian bookworm) for the audio services.
 - Server is strict TypeScript, ESM (`"type": "module"`, NodeNext). RFC 3339 UTC timestamps (`Z`). Every API response carries `X-Request-ID`; error bodies match the OpenAPI `Error` schema.
 - Never log or return secrets: camera passwords, Bearer/session tokens, RTSP userinfo. Session tokens are stored as SHA-256; camera secrets as AES-256-GCM (key from `CAMERA_ENCRYPTION_KEY_FILE`).
 - ONVIF library is `onvif` (agsh/onvif, Promise API) — business logic depends only on `src/cameras/adapter.ts`; adapters are selected automatically by `src/cameras/adapter-registry.ts` (Tapo first, generic ONVIF second).

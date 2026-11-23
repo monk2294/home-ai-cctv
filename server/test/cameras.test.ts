@@ -197,6 +197,28 @@ describe('CameraManager', () => {
     );
   });
 
+  test('лимит камер принимает конфигурацию', async () => {
+    const handle = createDb(':memory:');
+    runMigrations(handle.db);
+    const onvif = new FakeOnvifAdapter();
+    const manager = new CameraManager(
+      handle,
+      new CameraAdapterRegistry([onvif]),
+      new FakeMedia() as unknown as MediaGatewayClient,
+      new EventService(handle.db),
+      new SseHub(),
+      new PtzService(),
+      KEY,
+      1,
+    );
+    await manager.create({ name: 'only', ...CONN, enabled: false });
+    await assert.rejects(
+      () => manager.create({ name: 'extra', ...CONN, enabled: false }),
+      (e: unknown) => (e as { code?: string }).code === 'CAMERA_LIMIT_REACHED',
+    );
+    handle.close();
+  });
+
   test('reconnect для disabled даёт 409', async () => {
     const { manager } = ctx();
     const camera = await manager.create({ name: 'off', ...CONN, enabled: false });

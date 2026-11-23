@@ -1099,6 +1099,15 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            /** @description Ни один адаптер не определил камеру. Код CAMERA_ADAPTER_NOT_DETECTED, безопасное сообщение для пользователя. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             default: components["responses"]["UpstreamError"];
         };
     };

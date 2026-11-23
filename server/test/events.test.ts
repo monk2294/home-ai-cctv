@@ -85,6 +85,29 @@ describe('EventService', () => {
     assert.ok((rows[0]?.n ?? 0) <= 1000, `ожидалось <= 1000, получено ${rows[0]?.n}`);
   });
 
+  test('retention принимает конфигурацию', () => {
+    const limitedCameraId = randomUUID();
+    handle.db.insert(cameras).values({
+      id: limitedCameraId,
+      name: 'limited-cam',
+      host: '192.0.2.11',
+      onvifPort: 80,
+      enabled: 1,
+      username: 'u',
+      passwordEnc: 'enc',
+      profileToken: 'p1',
+      state: 'online',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }).run();
+    const limited = new EventService(handle.db, 2);
+    for (let i = 0; i < 3; i += 1) {
+      const result = limited.insert(limitedCameraId, 'active', `2026-11-21T14:00:0${i}Z`, `2026-11-21T14:00:0${i}Z`, 'topic', `hash-${i}`);
+      assert.equal(result.inserted, true);
+    }
+    assert.equal(limited.list(limitedCameraId, 10).length, 2);
+  });
+
   test('list возвращает события в порядке убывания ID', () => {
     const items = events.list(cameraId, 5);
     assert.equal(items.length, 5);

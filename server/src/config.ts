@@ -1,10 +1,15 @@
 import { readFileSync } from 'node:fs';
 
+export const DEFAULT_MAX_CAMERAS = 4;
+export const DEFAULT_EVENT_RETENTION_PER_CAMERA = 1000;
+
 /** Значение конфигурации сервера. Все секреты читаются из файлов. */
 export interface Config {
   host: string;
   port: number;
   databasePath: string;
+  maxCameras: number;
+  eventRetentionPerCamera: number;
   /** Содержимое файла ADMIN_PASSWORD_FILE. Только для первичного bootstrap. */
   adminBootstrapPassword: string;
   /** Содержимое файла AI_API_TOKEN_FILE. */
@@ -20,8 +25,8 @@ export interface Config {
 
 const LOG_LEVELS: readonly Config['logLevel'][] = ['debug', 'info', 'warn', 'error'];
 
-function readSecretFile(envName: string): string {
-  const path = process.env[envName];
+function readSecretFile(env: NodeJS.ProcessEnv, envName: string): string {
+  const path = env[envName];
   if (!path) {
     throw new Error(`Переменная ${envName} не задана`);
   }
@@ -38,6 +43,16 @@ function readSecretFile(envName: string): string {
   return trimmed;
 }
 
+function readPositiveInteger(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
+  const raw = env[name];
+  if (raw === undefined) return fallback;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new Error(`${name}=${raw} не является положительным целым числом`);
+  }
+  return value;
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const logLevelRaw = env.LOG_LEVEL ?? 'info';
   if (!LOG_LEVELS.includes(logLevelRaw as Config['logLevel'])) {
@@ -49,14 +64,22 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw new Error(`SERVER_PORT=${env.SERVER_PORT} не является портом`);
   }
 
-  const cameraEncryptionKeyB64 = readSecretFile('CAMERA_ENCRYPTION_KEY_FILE');
+  const maxCameras = readPositiveInteger(env, 'MAX_CAMERAS', DEFAULT_MAX_CAMERAS);
+  const eventRetentionPerCamera = readPositiveInteger(
+    env,
+    'EVENT_RETENTION_PER_CAMERA',
+    DEFAULT_EVENT_RETENTION_PER_CAMERA,
+  );
+  const cameraEncryptionKeyB64 = readSecretFile(env, 'CAMERA_ENCRYPTION_KEY_FILE');
 
   return {
     host: env.SERVER_HOST ?? '127.0.0.1',
     port,
     databasePath: env.DATABASE_PATH ?? '/data/home-ai-cctv.db',
-    adminBootstrapPassword: readSecretFile('ADMIN_PASSWORD_FILE'),
-    aiApiToken: readSecretFile('AI_API_TOKEN_FILE'),
+    maxCameras,
+    eventRetentionPerCamera,
+    adminBootstrapPassword: readSecretFile(env, 'ADMIN_PASSWORD_FILE'),
+    aiApiToken: readSecretFile(env, 'AI_API_TOKEN_FILE'),
     cameraEncryptionKeyB64,
     sessionCookieSecure: env.SESSION_COOKIE_SECURE === 'true',
     mediaApiBaseUrl: env.MEDIA_API_BASE_URL ?? 'http://127.0.0.1:1984',
