@@ -33,7 +33,7 @@ services:
     build:
       context: .
       dockerfile: web/Dockerfile
-    image: ${IMAGE_PREFIX:-home-ai-cctv}/web:${IMAGE_TAG:-0.2.1}
+    image: ${IMAGE_PREFIX:-home-ai-cctv}/web:${IMAGE_TAG:-0.2.2}
     <<: [*restart, *logging]
     networks:
       - edge
@@ -48,7 +48,7 @@ services:
     build:
       context: .
       dockerfile: server/Dockerfile
-    image: ${IMAGE_PREFIX:-home-ai-cctv}/server:${IMAGE_TAG:-0.2.1}
+    image: ${IMAGE_PREFIX:-home-ai-cctv}/server:${IMAGE_TAG:-0.2.2}
     <<: [*restart, *logging]
     networks:
       - backend
@@ -87,7 +87,7 @@ services:
     build:
       context: .
       dockerfile: mcp/Dockerfile
-    image: ${IMAGE_PREFIX:-home-ai-cctv}/mcp:${IMAGE_TAG:-0.2.1}
+    image: ${IMAGE_PREFIX:-home-ai-cctv}/mcp:${IMAGE_TAG:-0.2.2}
     <<: [*restart, *logging]
     networks:
       - backend

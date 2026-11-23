@@ -1,6 +1,6 @@
 {
   "name": "home-ai-cctv",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "description": "Локальная платформа для IP-камер с удалённым просмотром, PTZ, событиями движения и API для ИИ-агента.",
   "workspaces": [

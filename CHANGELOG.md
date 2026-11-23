@@ -4,7 +4,15 @@
 
 ## [Unreleased]
 
-## [0.2.1] - 2026-11-23
+## [0.2.2] - 2026-11-23
+
+### Изменено
+
+- Скриншоты и CSV проверок исключены из репозитория; каталог `docs/evidence/` добавлен в `.gitignore`.
+- Документация не содержит адресов локальной сети, локальных путей и серийных данных.
+- Метаданные коммитов приведены к одному автору.
+
+## 0.2.1 - 2026-11-23
 
 ### Безопасность
 
@@ -12,7 +20,7 @@
 - `HTTP_RATE_LIMIT_PER_MINUTE` меняет лимит; 429 использует `RATE_LIMIT_EXCEEDED` и общую схему `Error`.
 - Документированы пять ложных или требующих совместимости CodeQL alerts без глобального отключения правил.
 
-## [0.2.0] - 2026-11-23
+## 0.2.0 - 2026-11-23
 
 ### Добавлено
 
@@ -28,7 +36,7 @@
 - `loadConfig(env)` читает файлы секретов из переданного environment.
 - Override `esbuild=0.28.2` устраняет GHSA-67mh-4wv8-2f99 в transitive dev-зависимости `drizzle-kit`.
 
-## [0.1.0] - 2026-11-23
+## 0.1.0 - 2026-11-23
 
 ### Добавлено
 
@@ -39,7 +47,5 @@
 - Docker Compose, backup, restore и verification scripts.
 - Лицензия MIT.
 
-[Unreleased]: https://github.com/monk2294/home-ai-cctv/compare/v0.2.1...HEAD
-[0.2.1]: https://github.com/monk2294/home-ai-cctv/releases/tag/v0.2.1
-[0.2.0]: https://github.com/monk2294/home-ai-cctv/releases/tag/v0.2.0
-[0.1.0]: https://github.com/monk2294/home-ai-cctv/releases/tag/v0.1.0
+[Unreleased]: https://github.com/monk2294/home-ai-cctv/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/monk2294/home-ai-cctv/releases/tag/v0.2.2

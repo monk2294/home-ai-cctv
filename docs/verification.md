@@ -1,6 +1,6 @@
 # Матрица проверок home-ai-cctv
 
-Дата прогона: 2026-11-22. Стенд: Docker Compose на хосте 192.168.1.203, эталонная камера TP-Link Tapo C520WS (192.168.1.193:2020). Браузер: YaBrowser 26.8 (Chromium 150), Firefox 160 headless (сборка mozilla).
+Дата прогона: 2026-11-22. Стенд: Docker Compose на локальном хосте в домашней сети, эталонная камера TP-Link Tapo C520WS (ONVIF port 2020). Браузер: YaBrowser 26.8 (Chromium 150), Firefox 160 headless (сборка mozilla).
 
 Воспроизведение API-проверок: `./scripts/verify-stack.sh` (54 PASS-строки, фактический вывод ниже). Unit-тесты: `npm test` — 114/114. Firefox E2E: `E2E_FIREFOX=<путь к firefox> node scripts/e2e-firefox.mjs`. Проверки Chromium выполнены через CDP. Скриншоты и CSV остаются локальными artifacts и исключены из git.
 
