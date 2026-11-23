@@ -3,6 +3,7 @@ dist/
 data/
 secrets/
 backups/
+docs/evidence/
 config/go2rtc.yaml
 .env
 *.db
