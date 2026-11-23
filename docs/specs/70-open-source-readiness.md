@@ -53,6 +53,7 @@
 | D-04 | Как расширять камеры | Встроенные реализации существующего `CameraAdapter` | Контракт уже существует; runtime plugins добавляют риск |
 | D-05 | Как настроить эксплуатационные лимиты | `MAX_CAMERAS` и `EVENT_RETENTION_PER_CAMERA` с прежними defaults | Пользователь меняет capacity без fork |
 | D-06 | Как фиксировать Actions | Полный commit SHA с версией в комментарии | Supply chain и повторяемость |
+| D-07 | Как ограничить Dependabot noise | Игнорировать semver-major; major updates начинаются через Issue | Node.js и другие major updates требуют ручной проверки совместимости |
 
 ## План раскладки
 
@@ -74,3 +75,4 @@
 - 2026-11-23 — Gitleaks 8.30.1 проверил пять исходных commits. Два finding относятся к тестовому Bearer `wrong-token` и стандартному WebSocket handshake key. Точечные allowlist-правила устранили оба false positive; повторный scan не нашёл leaks.
 - 2026-11-23 — Проверка генерации нашла отсутствующий ответ 422 Probe в generated types. Commit `fix: sync generated OpenAPI types` устранил расхождение до запуска CI.
 - 2026-11-23 — Dependabot нашёл GHSA-67mh-4wv8-2f99 в dev-зависимости `drizzle-kit`. Override `esbuild=0.28.2` и dedupe удалили vulnerable copy. `npm audit` возвращает 0, а `db:generate` завершается без schema changes.
+- 2026-11-23 — Первый Dependabot run создал десять major PR, включая Node.js 26 при constraint `<23`. Добавлен ignore semver-major; существующие PR закрываются без merge.

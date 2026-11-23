@@ -51,6 +51,7 @@ docker compose build
 - После `server/src/db/schema.ts` запустите `npm run db:generate --workspace server` и приложите миграцию.
 - Проверяйте backup и restore при изменении хранения.
 - Не добавляйте новый сервис или зависимость без объяснения задачи.
+- Major updates зависимостей начинайте через Issue. Dependabot предлагает minor, patch и security updates; major updates требуют отдельной оценки совместимости.
 
 Архитектура и источники истины перечислены в [docs/README.md](docs/README.md).
 

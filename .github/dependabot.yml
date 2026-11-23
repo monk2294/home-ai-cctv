@@ -6,28 +6,46 @@ updates:
       interval: weekly
     open-pull-requests-limit: 10
     labels: [dependencies]
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: weekly
     labels: [dependencies, docker]
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
   - package-ecosystem: docker
     directory: /server
     schedule:
       interval: weekly
     labels: [dependencies, docker]
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
   - package-ecosystem: docker
     directory: /web
     schedule:
       interval: weekly
     labels: [dependencies, docker]
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
   - package-ecosystem: docker
     directory: /mcp
     schedule:
       interval: weekly
     labels: [dependencies, docker]
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
     labels: [dependencies, ci]
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
