@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: home-ai-cctv
+---
+# ConfigMap caddy-config создаётся не из этого файла, а из config/Caddyfile:
+# microk8s kubectl -n home-ai-cctv create configmap caddy-config \
+#   --from-file=Caddyfile=config/Caddyfile --dry-run=client -o yaml | microk8s kubectl apply -f -
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: server-data
+  namespace: home-ai-cctv
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: microk8s-hostpath
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: media-config
+  namespace: home-ai-cctv
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: microk8s-hostpath
+  resources:
+    requests:
+      storage: 100Mi
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: media-access
+  namespace: home-ai-cctv
+spec:
+  podSelector:
+    matchLabels:
+      app: media
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values: [server, proxy]
+        - ipBlock:
+            cidr: 192.168.1.123/32
+      ports:
+        - protocol: TCP
+          port: 1984
+    - ports:
+        - protocol: TCP
+          port: 8555
+        - protocol: UDP
+          port: 8555
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: go2rtc-config
+  namespace: home-ai-cctv
+data:
+  go2rtc.example.yaml: |
+    api:
+      listen: ":1984"
+      base_path: "/media"
+
+    webrtc:
+      listen: ":8555"
+
+    rtsp:
+      listen: ""
+
+    log:
+      level: info
+  go2rtc-entrypoint.sh: |
+    #!/bin/sh
+    set -eu
+    WEBRTC_LAN_PORT="${WEBRTC_LAN_PORT:-8555}"
+    if [ -n "${WEBRTC_LAN_CANDIDATE:-}" ]; then
+      awk -v cand="$WEBRTC_LAN_CANDIDATE" -v port="$WEBRTC_LAN_PORT" '
+        /^  candidates:/ { print; print "    - " cand ":" port; skip = 1; next }
+        skip && /^    - / { next }
+        skip && /^  - / { next }
+        { skip = 0; print }
+      ' /config/go2rtc.yaml > /config/go2rtc.yaml.tmp
+      cat /config/go2rtc.yaml.tmp > /config/go2rtc.yaml
+      rm -f /config/go2rtc.yaml.tmp
+    fi
+    exec /sbin/tini -- go2rtc -config /config/go2rtc.yaml

@@ -14,7 +14,7 @@ import {
 } from './adapter.js';
 import type { CameraAdapterRegistry } from './adapter-registry.js';
 import { CameraRepository, probeStreamName, streamNameFor, type CameraRow } from './repository.js';
-import type { EventService } from '../events/service.js';
+import type { CameraEvent, EventService } from '../events/service.js';
 import type { SseHub } from '../events/sse.js';
 import type { PtzService } from '../ptz/service.js';
 import { ApiError } from '../http/errors.js';
@@ -104,6 +104,7 @@ export class CameraManager {
   private readonly runtimes = new Map<string, CameraRuntime>();
   private readonly reconcileGeneration = new Map<string, number>();
   private readonly reconcileQueue = new Map<string, Promise<void>>();
+  private offlineReconcileRunning = false;
   private readonly snapInflight = new Map<string, Promise<Buffer>>();
   private readonly snapCache = new Map<string, { jpeg: Buffer; atMs: number }>();
 
@@ -116,6 +117,7 @@ export class CameraManager {
     private readonly ptz: PtzService,
     private readonly cameraKey: Buffer,
     private readonly maxCameras = DEFAULT_MAX_CAMERAS,
+    private readonly onStoredEvent: (event: CameraEvent) => void = () => undefined,
   ) {
     this.repo = new CameraRepository(handle.db);
   }
@@ -570,6 +572,22 @@ export class CameraManager {
 
   // ---------- Reconciliation (раздел 10) ----------
 
+  /** Повторяет подключение только offline-камер; online-подключения не пересоздаются. */
+  async reconcileOffline(): Promise<void> {
+    if (this.offlineReconcileRunning) {
+      return;
+    }
+    this.offlineReconcileRunning = true;
+    try {
+      const offline = this.repo
+        .listEnabled()
+        .filter((camera) => camera.state === 'offline' && !this.reconcileQueue.has(camera.id));
+      await Promise.all(offline.map((camera) => this.reconcileCamera(camera.id)));
+    } finally {
+      this.offlineReconcileRunning = false;
+    }
+  }
+
   /** Идемпотентное восстановление состояния после запуска. */
   async reconcileAll(): Promise<void> {
     const enabled = this.repo.listEnabled();
@@ -709,14 +727,18 @@ export class CameraManager {
           .where(eq(cameras.id, id))
           .run();
         // Первое подтверждённое событие движения уточняет capability (раздел 6.1).
-        const current = this.repo.get(id);
-        if (current) {
-          const capabilities = this.toPublic(current).capabilities;
-          if (capabilities.motion_events === 'unknown') {
-            this.repo.update(id, { capabilities: { ...capabilities, motion_events: 'supported' } });
+        // События других типов (people, tamper) motion не подтверждают.
+        if (stored.event.type === 'motion') {
+          const current = this.repo.get(id);
+          if (current) {
+            const capabilities = this.toPublic(current).capabilities;
+            if (capabilities.motion_events === 'unknown') {
+              this.repo.update(id, { capabilities: { ...capabilities, motion_events: 'supported' } });
+            }
           }
         }
         this.sse.broadcast(stored.event);
+        this.onStoredEvent(stored.event);
       }
     });
     const state: CameraRow['state'] = rtspOverride ? 'degraded' : 'online';

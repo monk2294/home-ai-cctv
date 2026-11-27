@@ -8,7 +8,8 @@ import type { MediaGatewayClient } from '../src/media/client.js';
 import { EventService } from '../src/events/service.js';
 import { SseHub } from '../src/events/sse.js';
 import { PtzService } from '../src/ptz/service.js';
-import type { CameraAdapter, CameraConnection, CameraSession, ProbeResult } from '../src/cameras/adapter.js';
+import type { CameraEvent } from '../src/events/service.js';
+import type { CameraAdapter, CameraConnection, CameraSession, ProbeResult, RawCameraEvent } from '../src/cameras/adapter.js';
 import { CameraAdapterRegistry } from '../src/cameras/adapter-registry.js';
 
 class FakeMedia implements Partial<MediaGatewayClient> {
@@ -58,6 +59,7 @@ class FakeOnvifAdapter implements CameraAdapter {
   readonly displayName = 'Fake ONVIF';
   opened = 0;
   failConnect = false;
+  eventListener: ((event: RawCameraEvent) => void) | null = null;
   sourceDelayMs = 0;
   sourceError: Error | null = null;
   audioOutput: ProbeResult['capabilities']['audio_output'] = 'unsupported';
@@ -86,6 +88,7 @@ class FakeOnvifAdapter implements CameraAdapter {
       throw new Error('connect failed');
     }
     this.opened += 1;
+    this.eventListener = null;
     const source = `rtsp://${encodeURIComponent(conn.username)}:${encodeURIComponent(conn.password)}@${conn.host}/stream1`;
     return {
       getMediaSources: async () => {
@@ -102,7 +105,12 @@ class FakeOnvifAdapter implements CameraAdapter {
       ptzStop: async () => undefined,
       getPtzPresets: async () => [{ token: 'preset1', name: 'Дом' }],
       gotoPreset: async () => undefined,
-      onEvent: () => () => undefined,
+      onEvent: (listener) => {
+        this.eventListener = listener;
+        return () => {
+          this.eventListener = null;
+        };
+      },
       close: async () => undefined,
     };
   }
@@ -118,7 +126,7 @@ interface Ctx {
   close: () => void;
 }
 
-function buildCtx(): Ctx {
+function buildCtx(onStoredEvent: (event: CameraEvent) => void = () => undefined): Ctx {
   const handle = createDb(':memory:');
   runMigrations(handle.db);
   const onvif = new FakeOnvifAdapter();
@@ -131,6 +139,8 @@ function buildCtx(): Ctx {
     new SseHub(),
     new PtzService(),
     KEY,
+    undefined,
+    onStoredEvent,
   );
   return { handle, manager, onvif, media, close: () => handle.close() };
 }
@@ -139,8 +149,8 @@ const CONN = { host: '192.0.2.10', onvifPort: 80, username: 'admin', password: '
 
 describe('CameraManager', () => {
   const ctxs: Ctx[] = [];
-  function ctx(): Ctx {
-    const c = buildCtx();
+  function ctx(onStoredEvent: (event: CameraEvent) => void = () => undefined): Ctx {
+    const c = buildCtx(onStoredEvent);
     ctxs.push(c);
     return c;
   }
@@ -226,6 +236,75 @@ describe('CameraManager', () => {
       () => manager.reconnect(camera.id),
       (e: unknown) => (e as { code?: string }).code === 'CAMERA_DISABLED',
     );
+  });
+
+  test('reconcileOffline повторяет подключение после сбоя media и не трогает online', async () => {
+    const { manager, media, onvif } = ctx();
+    const camera = await manager.create({ name: 'retry', ...CONN, enabled: false });
+    media.failNext = true;
+    await manager.update(camera.id, { enabled: true });
+    assert.equal(manager.getCamera(camera.id).state, 'offline');
+
+    const openedAfterFailure = onvif.opened;
+    await manager.reconcileOffline();
+    assert.equal(manager.getCamera(camera.id).state, 'online');
+    assert.equal(onvif.opened, openedAfterFailure + 1);
+
+    await manager.reconcileOffline();
+    assert.equal(onvif.opened, openedAfterFailure + 1);
+  });
+
+  test('onStoredEvent получает только новое motion-событие', async () => {
+    const stored: CameraEvent[] = [];
+    const { manager, onvif } = ctx((event) => stored.push(event));
+    await manager.create({ name: 'events', ...CONN, enabled: true });
+    assert.ok(onvif.eventListener);
+
+    const raw = {
+      topic: 'tns1:RuleEngine/CellMotionDetector/Motion',
+      utcTime: '2026-11-23T20:00:00.000Z',
+      messageId: null,
+      stateName: 'IsMotion',
+      stateValue: 'true',
+    };
+    onvif.eventListener?.(raw);
+    onvif.eventListener?.(raw);
+    onvif.eventListener?.({ ...raw, topic: 'tns1:Unknown/Topic', stateValue: 'true' });
+
+    assert.equal(stored.length, 1);
+    assert.equal(stored[0]?.camera_id, manager.listCameras()[0]?.id);
+    assert.equal(stored[0]?.state, 'active');
+    assert.equal(stored[0]?.source, 'onvif');
+  });
+
+  test('people-событие не подтверждает motion capability', async () => {
+    const { manager, onvif } = ctx();
+    const camera = await manager.create({ name: 'people-cap', ...CONN, enabled: true });
+    assert.ok(onvif.eventListener);
+    onvif.eventListener?.({
+      topic: 'tns1:RuleEngine/PeopleDetector/People',
+      utcTime: '2026-11-24T20:00:00.000Z',
+      messageId: null,
+      stateName: 'IsPeople',
+      stateValue: 'true',
+    });
+    const row = manager.repository().get(camera.id);
+    assert.equal(row ? JSON.parse(row.capabilities).motion_events : null, 'unknown');
+  });
+
+  test('motion-событие подтверждает motion capability', async () => {
+    const { manager, onvif } = ctx();
+    const camera = await manager.create({ name: 'motion-cap', ...CONN, enabled: true });
+    assert.ok(onvif.eventListener);
+    onvif.eventListener?.({
+      topic: 'tns1:RuleEngine/CellMotionDetector/Motion',
+      utcTime: '2026-11-24T20:00:00.000Z',
+      messageId: null,
+      stateName: 'IsMotion',
+      stateValue: 'true',
+    });
+    const row = manager.repository().get(camera.id);
+    assert.equal(row ? JSON.parse(row.capabilities).motion_events : null, 'supported');
   });
 
   test('update: пустой пароль сохраняет прежний, enable запускает reconcile', async () => {

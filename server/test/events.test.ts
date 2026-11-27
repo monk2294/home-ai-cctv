@@ -18,6 +18,16 @@ function motionRaw(state: string, utcTime = '2026-11-21T12:00:00.000Z'): RawCame
   };
 }
 
+function peopleRaw(state: string, utcTime = '2026-11-21T12:30:00.000Z'): RawCameraEvent {
+  return {
+    topic: 'tns1:RuleEngine/PeopleDetector/People',
+    utcTime,
+    messageId: null,
+    stateName: 'IsPeople',
+    stateValue: state,
+  };
+}
+
 describe('EventService', () => {
   let handle: DbHandle;
   let events: EventService;
@@ -67,7 +77,61 @@ describe('EventService', () => {
     assert.equal(stored.inserted, false);
   });
 
+  test('событие People сохраняется с типом people', () => {
+    const stored = events.handleRawEvent(cameraId, peopleRaw('true', '2026-11-21T12:30:00.000Z'));
+    assert.equal(stored.inserted, true);
+    assert.equal(stored.event?.type, 'people');
+    assert.equal(stored.event?.state, 'active');
+  });
+
+  test('повтор того же состояния троттлируется, переходы сохраняются', () => {
+    const repeat = events.handleRawEvent(cameraId, peopleRaw('true', '2026-11-21T12:31:00.000Z'));
+    assert.equal(repeat.inserted, false);
+    const gone = events.handleRawEvent(cameraId, peopleRaw('false', '2026-11-21T12:31:10.000Z'));
+    assert.equal(gone.inserted, true);
+    const back = events.handleRawEvent(cameraId, peopleRaw('true', '2026-11-21T12:31:20.000Z'));
+    assert.equal(back.inserted, true);
+    const flood = events.handleRawEvent(cameraId, peopleRaw('true', '2026-11-21T12:31:20.500Z'));
+    assert.equal(flood.inserted, false);
+  });
+
+  test('типы событий не троттлируют друг друга', () => {
+    const tamper = events.handleRawEvent(cameraId, {
+      topic: 'tns1:RuleEngine/TamperDetector/Tamper',
+      utcTime: '2026-11-21T12:32:00.000Z',
+      messageId: null,
+      stateName: 'IsTamper',
+      stateValue: 'true',
+    });
+    assert.equal(tamper.inserted, true);
+    const tamperRepeat = events.handleRawEvent(cameraId, {
+      topic: 'tns1:RuleEngine/TamperDetector/Tamper',
+      utcTime: '2026-11-21T12:32:00.100Z',
+      messageId: null,
+      stateName: 'IsTamper',
+      stateValue: 'true',
+    });
+    assert.equal(tamperRepeat.inserted, false);
+    const intrusion = events.handleRawEvent(cameraId, {
+      topic: 'tns1:RuleEngine/IntrusionDetector/Intrusion',
+      utcTime: '2026-11-21T12:32:00.200Z',
+      messageId: null,
+      stateName: 'IsIntrusion',
+      stateValue: 'true',
+    });
+    assert.equal(intrusion.inserted, true);
+  });
+
+  test('keepalive после окна записывается снова', () => {
+    const old = new Date(Date.now() - 60_000).toISOString();
+    const first = events.insert(cameraId, 'people', 'active', old, old, 'tns1:RuleEngine/PeopleDetector/People', 'keepalive-old');
+    assert.equal(first.inserted, true);
+    const second = events.handleRawEvent(cameraId, peopleRaw('true', new Date().toISOString()));
+    assert.equal(second.inserted, true);
+  });
+
   test('повторная доставка PullMessages не создаёт дубликат', () => {
+    events.handleRawEvent(cameraId, motionRaw('false', '2026-11-21T12:00:30.000Z'));
     const first = events.handleRawEvent(cameraId, motionRaw('true', '2026-11-21T12:01:00.000Z'));
     const second = events.handleRawEvent(cameraId, motionRaw('true', '2026-11-21T12:01:00.000Z'));
     assert.equal(first.inserted, true);
@@ -76,7 +140,16 @@ describe('EventService', () => {
     assert.equal(list.length, 1);
   });
 
+  test('одинаковый dedupHash не создаёт вторую запись', () => {
+    const stamp = '2026-11-21T12:10:00.000Z';
+    const first = events.insert(cameraId, 'motion', 'inactive', stamp, stamp, 'tns1:RuleEngine/CellMotionDetector/Motion', 'dup-hash');
+    const second = events.insert(cameraId, 'motion', 'inactive', stamp, stamp, 'tns1:RuleEngine/CellMotionDetector/Motion', 'dup-hash');
+    assert.equal(first.inserted, true);
+    assert.equal(second.inserted, false);
+  });
+
   test('retention оставляет не более 1000 событий на камеру', () => {
+    events.handleRawEvent(cameraId, motionRaw('false', '2026-11-21T12:59:59.000Z'));
     for (let i = 0; i < 1005; i += 1) {
       const stored = events.handleRawEvent(cameraId, motionRaw(i % 2 === 0 ? 'true' : 'false', `2026-11-21T13:${String(Math.floor(i / 60)).padStart(2, '0')}:${String(i % 60).padStart(2, '0')}Z`));
       assert.equal(stored.inserted, true);
@@ -102,7 +175,7 @@ describe('EventService', () => {
     }).run();
     const limited = new EventService(handle.db, 2);
     for (let i = 0; i < 3; i += 1) {
-      const result = limited.insert(limitedCameraId, 'active', `2026-11-21T14:00:0${i}Z`, `2026-11-21T14:00:0${i}Z`, 'topic', `hash-${i}`);
+      const result = limited.insert(limitedCameraId, 'motion', 'active', `2026-11-21T14:00:0${i}Z`, `2026-11-21T14:00:0${i}Z`, 'topic', `hash-${i}`);
       assert.equal(result.inserted, true);
     }
     assert.equal(limited.list(limitedCameraId, 10).length, 2);

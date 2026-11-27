@@ -10,6 +10,8 @@
 | `server/` | Node.js 22 + Fastify + SQLite (Drizzle). Авторизация, API v1, звук (WAV-захват для ИИ, воспроизведение файлов). |
 | `web/` | React + Vite + TypeScript. Веб-клиент администратора: просмотр, PTZ, события, push-to-talk, polling снимков, мобильная раскладка. |
 | `config/` | Caddyfile и go2rtc.example.yaml для Docker Compose. |
+| `deploy/microk8s/` | Namespace, PVC, ConfigMap, Deployment и Service для microk8s. |
+| `deploy/openhab/` | Правила openHAB: снимок по событию движения с вопросами локальной модели и свет в кабинете по присутствию. |
 | `scripts/` | Создание файлов секретов. |
 | `docs/` | Спецификации и OpenAPI-контракт. |
 
@@ -78,6 +80,16 @@
 Порты на host: `8080/tcp` (HTTP-вход Caddy), `8555/tcp+udp` (WebRTC media). Порты сервера, веб-клиента и API медиашлюза наружу не публикуются.
 
 WebRTC: go2rtc в Docker отдаёт ICE-кандидатом адрес контейнерной сети. Задайте LAN-адрес хоста в рабочем `config/go2rtc.yaml` (`webrtc.candidates: [<LAN IP>:8555]`), иначе браузер уйдёт в HLS fallback. Рабочий config создаёт `init-secrets.sh` из `config/go2rtc.example.yaml`: go2rtc дописывает в него streams с учётными данными камер, поэтому файл имеет права 0600 и исключён из репозитория.
+
+## Запуск в microk8s
+
+Инструкция и манифесты: [docs/microk8s.md](docs/microk8s.md) и `deploy/microk8s/`. HTTP-вход использует NodePort `30081`, WebRTC — `30555/tcp+udp`. SQLite и рабочий `go2rtc.yaml` хранятся в отдельных PVC.
+
+## События в openHAB
+
+`server` публикует события камер в MQTT-топик `home-ai-cctv/events`. Правило openHAB на каждое движение берёт снимок и задаёт локальной decision-модели (llama.cpp, `/v1/systemone`) типизированные вопросы по камере. Настройка: [docs/openhab.md](docs/openhab.md), правило: `deploy/openhab/homecctv_camera_events.js`.
+
+Правило `office_light_presence` включает свет в кабинете при появлении человека (по событию движения камеры «Рабочее место») и выключает его примерно через 5 секунд после ухода: по событию `motion inactive`, после 2 с тишины и проверки кадра моделью. Cron раз в минуту — страховка. Расписание `office_light_schedule` отключено. Правило: `deploy/openhab/office_light_presence.js`.
 
 ## Локальная разработка
 

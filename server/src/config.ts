@@ -22,6 +22,12 @@ export interface Config {
   mediaApiBaseUrl: string;
   /** Внутренний base URL этого сервера для выдачи аудио контейнеру media. */
   audioInternalBaseUrl: string;
+  /** Опциональный MQTT-публикатор camera events. Без MQTT_URL выключен. */
+  mqtt: {
+    url: string;
+    username?: string;
+    password?: string;
+  } | null;
   logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
 
@@ -78,6 +84,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     DEFAULT_HTTP_RATE_LIMIT_PER_MINUTE,
   );
   const cameraEncryptionKeyB64 = readSecretFile(env, 'CAMERA_ENCRYPTION_KEY_FILE');
+  const mqtt = readMqttConfig(env);
 
   return {
     host: env.SERVER_HOST ?? '127.0.0.1',
@@ -92,8 +99,43 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     sessionCookieSecure: env.SESSION_COOKIE_SECURE === 'true',
     mediaApiBaseUrl: env.MEDIA_API_BASE_URL ?? 'http://127.0.0.1:1984',
     audioInternalBaseUrl: env.AUDIO_INTERNAL_BASE_URL ?? `http://127.0.0.1:${port}`,
+    mqtt,
     logLevel: logLevelRaw as Config['logLevel'],
   };
+}
+
+/** Опциональный MQTT-публикатор событий. Пароль читается только из файла, userinfo в URL запрещён. */
+function readMqttConfig(env: NodeJS.ProcessEnv): Config['mqtt'] {
+  const url = env.MQTT_URL;
+  const username = env.MQTT_USERNAME;
+  const passwordFile = env.MQTT_PASSWORD_FILE;
+
+  if (!url) {
+    if (username || passwordFile) {
+      throw new Error('MQTT_URL обязателен при MQTT_USERNAME или MQTT_PASSWORD_FILE');
+    }
+    return null;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    // Значение URL не включаем: оно может содержать userinfo с паролем.
+    throw new Error('MQTT_URL некорректен');
+  }
+  if (parsed.protocol !== 'mqtt:' && parsed.protocol !== 'mqtts:') {
+    throw new Error('MQTT_URL должен использовать mqtt:// или mqtts://');
+  }
+  if (!parsed.hostname || parsed.username || parsed.password) {
+    throw new Error('MQTT_URL должен содержать host без userinfo');
+  }
+  if (Boolean(username) !== Boolean(passwordFile)) {
+    throw new Error('MQTT_USERNAME и MQTT_PASSWORD_FILE задаются вместе');
+  }
+
+  const password = passwordFile ? readSecretFile(env, 'MQTT_PASSWORD_FILE') : undefined;
+  return { url, ...(username !== undefined && password !== undefined ? { username, password } : {}) };
 }
 
 /** Проверяет формат ключа шифрования камер: base64 ровно на 32 байта. */

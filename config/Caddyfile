@@ -90,6 +90,17 @@
 		respond 404
 	}
 
+	# Веб-клиент на context path /video (LAN-доступ без tunnel).
+	# Ассеты и роутинг SPA идут под /video/*; API и media остаются в корне.
+	# Корень отдаём на /video/: у SPA basename /video, без редиректа корень пустой.
+	redir / /video/ permanent
+	redir /video /video/ permanent
+
+	handle /video/* {
+		uri strip_prefix /video
+		reverse_proxy web:80
+	}
+
 	# Всё остальное — статический SPA.
 	handle {
 		reverse_proxy web:80
@@ -102,5 +113,28 @@
 		Permissions-Policy "camera=(), microphone=(self), geolocation=()"
 		Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; script-src 'self'; worker-src 'self' blob:"
 		-Server
+	}
+}
+
+# Внутренний listener для автоматизаций: не публикуется через NodePort (спецификация 30, раздел 3).
+# openHAB берёт снимок без собственных учётных данных, AI-токен подставляет прокси из окружения.
+:8081 {
+	log {
+		format json
+		level INFO
+	}
+
+	@aiSnapshot {
+		method GET
+		path /api/v1/ai/cameras/*/snapshot.jpg
+	}
+	handle @aiSnapshot {
+		reverse_proxy server:8000 {
+			header_up Authorization "Bearer {$CCTV_AI_TOKEN}"
+		}
+	}
+
+	handle {
+		respond 404
 	}
 }

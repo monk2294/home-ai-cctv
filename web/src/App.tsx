@@ -26,7 +26,7 @@ function RequireAuth({ children }: { children: ReactNode }) {
 
 export function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/video">
       <AuthProvider>
         <EventsProvider>
           <Routes>

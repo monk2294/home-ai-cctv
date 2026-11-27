@@ -631,7 +631,7 @@ paths:
         schema:
           type: integer
           minimum: 1
-          maximum: 5
+          maximum: 15
           default: 2
       - name: width
         in: query
@@ -1390,7 +1390,8 @@ components:
           format: uuid
         type:
           type: string
-          enum: [motion]
+          enum: [motion, people, tamper, intrusion, line_cross, smart_event]
+          description: Движение и подтверждённые бортовые события Tapo C520WS (люди, тампер, зона, линия, смарт-событие).
         state:
           type: string
           enum: [active, inactive]
