@@ -26,6 +26,6 @@
     "@types/node": "22.8.7",
     "drizzle-kit": "0.31.11",
     "tsx": "4.23.15",
-    "typescript": "5.8.3"
+    "typescript": "5.9.3"
   }
 }
