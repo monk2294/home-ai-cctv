@@ -1,5 +1,7 @@
 # home-ai-cctv
 
+[![M8ven Score](https://m8ven.ai/badge/mcp/monk2294-home-ai-cctv-wqxwnj?v=dec3c05a1e9ed59b08c70d1dfd7409cc)](https://m8ven.ai/mcp/monk2294/home-ai-cctv-wqxwnj?s=readme)
+
 Локальная платформа для IP-камер: удалённый просмотр, PTZ, события движения и API для ИИ-агента.
 Архитектура, требования и решения — в [docs/](docs/README.md). Требования этапа 2 — в [docs/specs/50-stage-2.md](docs/specs/50-stage-2.md). Самодостаточное задание агенту-исполнителю — в [docs/specs/51-stage-2-executor-task.md](docs/specs/51-stage-2-executor-task.md).
 
