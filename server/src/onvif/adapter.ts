@@ -168,9 +168,12 @@ export function extractRawEvent(msg: unknown): RawCameraEvent {
   let stateName: string | null = null;
   let stateValue: string | null = null;
   for (const item of items) {
-    if (item.name === 'IsMotion' || item.name === 'Motion') {
-      stateName = String(item.name);
-      stateValue = item.value === undefined || item.value === null ? null : String(item.value);
+    // Берём первое булево-подобное значение: IsMotion, IsPeople, IsTamper и другие Is*.
+    const value = item.value === undefined || item.value === null ? null : String(item.value);
+    const normalizedValue = (value ?? '').toLowerCase();
+    if (normalizedValue === 'true' || normalizedValue === 'false' || normalizedValue === '1' || normalizedValue === '0') {
+      stateName = String(item.name ?? '');
+      stateValue = value;
       break;
     }
   }

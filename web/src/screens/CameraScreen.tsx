@@ -35,7 +35,7 @@ export function CameraScreen() {
   const [deleting, setDeleting] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const events = useCameraEvents(cameraId);
+  const { events, lastMotion } = useCameraEvents(cameraId);
 
   const load = useCallback(async () => {
     if (!cameraId) return;
@@ -103,7 +103,6 @@ export function CameraScreen() {
     );
   }
 
-  const lastEvent = events[0];
   const playerEnabled = camera.enabled && camera.state !== 'disabled';
 
   return (
@@ -151,10 +150,10 @@ export function CameraScreen() {
               <h3 className={styles.sectionTitle}>События</h3>
               <span className={styles.sse}>SSE: {SSE_LABELS[sseStatus]}</span>
             </div>
-            {lastEvent ? (
+            {lastMotion ? (
               <p className={styles.lastMotion}>
-                Последнее движение: {new Date(lastEvent.occurred_at).toLocaleString('ru-RU')} (
-                {lastEvent.state === 'active' ? 'активно' : 'завершено'}). Состояние может быть устаревшим.
+                Последнее движение: {new Date(lastMotion.occurred_at).toLocaleString('ru-RU')} (
+                {lastMotion.state === 'active' ? 'активно' : 'завершено'}). Состояние может быть устаревшим.
               </p>
             ) : (
               <p className={styles.lastMotion}>Событий движения пока нет</p>

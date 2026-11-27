@@ -2,7 +2,7 @@ import type { MediaGatewayClient } from '../media/client.js';
 import { ApiError } from '../http/errors.js';
 
 export const MJPEG_DEFAULT_FPS = 2;
-export const MJPEG_MAX_FPS = 5;
+export const MJPEG_MAX_FPS = 15;
 export const MJPEG_DEFAULT_WIDTH = 640;
 export const MJPEG_MAX_WIDTH = 1280;
 export const MJPEG_MIN_WIDTH = 64;

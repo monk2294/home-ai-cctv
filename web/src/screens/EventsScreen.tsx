@@ -76,7 +76,7 @@ export function EventsScreen() {
         </p>
       )}
       {events.length === 0 ? (
-        <p className={styles.empty}>Событий движения пока нет. Они появятся, когда камера зафиксирует движение.</p>
+        <p className={styles.empty}>Событий пока нет. Камеры сообщают о движении и о людях в кадре.</p>
       ) : (
         <div className={styles.list}>
           {events.map((event) => (

@@ -17,9 +17,20 @@ function formatDate(iso: string): string {
   return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
 }
 
-/** Строка события: время, состояние движения, камера. Без архива — MVP. */
+/** Строки заголовков по типу события: [active, inactive]. */
+const EVENT_TITLES: Record<string, [string, string]> = {
+  motion: ['Движение началось', 'Движение закончилось'],
+  people: ['Человек в кадре', 'Человека в кадре нет'],
+  tamper: ['Камеру сдвинули или закрыли', 'Камера вернулась в покой'],
+  intrusion: ['Вторжение в зону', 'В зоне пусто'],
+  line_cross: ['Линия пересечена', 'Линия свободна'],
+  smart_event: ['Смарт-событие', 'Смарт-событие завершено'],
+};
+
+/** Строка события: время, тип и состояние события, камера. Без архива — MVP. */
 export function EventRow({ event, cameraName }: Props) {
   const active = event.state === 'active';
+  const [activeTitle, inactiveTitle] = EVENT_TITLES[event.type] ?? EVENT_TITLES.motion!;
   return (
     <div className={styles.row}>
       <div className={styles.time}>
@@ -28,7 +39,7 @@ export function EventRow({ event, cameraName }: Props) {
       </div>
       <div className={styles.info}>
         <span className={styles.title}>
-          {active ? 'Движение началось' : 'Движение закончилось'}
+          {active ? activeTitle : inactiveTitle}
         </span>
         <Link className={styles.camera} to={`/cameras/${event.camera_id}`}>
           {cameraName ?? 'Камера'}

@@ -22,6 +22,11 @@ services:
       - backend
     volumes:
       - ./config/Caddyfile:/etc/caddy/Caddyfile:ro
+    environment:
+      # Внутренний listener :8081 подставляет AI-токен в запросы снимков (спецификация 30, раздел 3).
+      # Caddy не читает файлы секретов: токен передаётся из окружения хоста.
+      # Пустое значение — listener отвечает 401, основной маршрут работает без изменений.
+      CCTV_AI_TOKEN: ${CCTV_AI_TOKEN:-}
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8080/"]
       interval: 30s

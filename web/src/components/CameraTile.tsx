@@ -24,7 +24,7 @@ function capabilityMark(state: string): string {
 export function CameraTile({ camera, index, onEdit, onDelete }: Props) {
   const navigate = useNavigate();
   const { markAnonymous } = useAuth();
-  const { buffer } = useEvents();
+  const { buffer, lastMotionByCamera } = useEvents();
   const pollingActive = camera.enabled && camera.state === 'online';
   const { containerRef, blobUrl } = useSnapshotPolling({
     cameraId: camera.id,
@@ -34,7 +34,7 @@ export function CameraTile({ camera, index, onEdit, onDelete }: Props) {
   });
 
   const lastEvent = buffer.find((e) => e.camera_id === camera.id);
-  const motionActive = lastEvent?.state === 'active';
+  const motionActive = lastMotionByCamera[camera.id]?.state === 'active';
 
   const showImage = pollingActive && blobUrl !== null;
   const camLabel = `CAM ${String(index + 1).padStart(2, '0')}`;

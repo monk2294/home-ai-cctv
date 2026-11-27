@@ -1,0 +1,536 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: server
+  namespace: home-ai-cctv
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: server
+  template:
+    metadata:
+      labels:
+        app: server
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: server
+          image: home-ai-cctv/server:0.3.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SERVER_HOST
+              value: 0.0.0.0
+            - name: SERVER_PORT
+              value: "8000"
+            - name: DATABASE_PATH
+              value: /data/home-ai-cctv.db
+            - name: MAX_CAMERAS
+              value: "4"
+            - name: EVENT_RETENTION_PER_CAMERA
+              value: "1000"
+            - name: HTTP_RATE_LIMIT_PER_MINUTE
+              value: "1200"
+            - name: MEDIA_API_BASE_URL
+              value: http://media:1984
+            - name: AUDIO_INTERNAL_BASE_URL
+              value: http://server:8000
+            - name: MQTT_URL
+              value: mqtt://mosquitto.smart-devices.svc.cluster.local:1883
+            - name: MQTT_USERNAME
+              value: home-cctv
+            - name: MQTT_PASSWORD_FILE
+              value: /run/secrets-mqtt/password
+            - name: ADMIN_PASSWORD_FILE
+              value: /run/secrets/admin_password
+            - name: AI_API_TOKEN_FILE
+              value: /run/secrets/ai_api_token
+            - name: CAMERA_ENCRYPTION_KEY_FILE
+              value: /run/secrets/camera_encryption_key
+            - name: SESSION_COOKIE_SECURE
+              value: "false"
+            - name: LOG_LEVEL
+              value: info
+          ports:
+            - name: http
+              containerPort: 8000
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+            - name: mqtt-secret
+              mountPath: /run/secrets-mqtt
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health/ready
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: server-data
+        - name: secrets
+          secret:
+            secretName: home-ai-cctv-secrets
+            defaultMode: 0440
+        - name: mqtt-secret
+          secret:
+            secretName: home-ai-cctv-mqtt
+            items:
+              - key: password
+                path: password
+            defaultMode: 0440
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: server
+  namespace: home-ai-cctv
+spec:
+  selector:
+    app: server
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: media
+  namespace: home-ai-cctv
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: media
+  template:
+    metadata:
+      labels:
+        app: media
+    spec:
+      automountServiceAccountToken: false
+      initContainers:
+        - name: init-config
+          image: ghcr.io/alexxit/go2rtc:1.9.9
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              if [ ! -f /config/go2rtc.yaml ]; then
+                cp /bootstrap/go2rtc.example.yaml /config/go2rtc.yaml
+              fi
+              chmod 600 /config/go2rtc.yaml
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: bootstrap
+              mountPath: /bootstrap
+              readOnly: true
+      containers:
+        - name: media
+          image: ghcr.io/alexxit/go2rtc:1.9.9
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "/go2rtc-entrypoint.sh"]
+          env:
+            - name: WEBRTC_LAN_CANDIDATE
+              value: 192.168.1.123
+            - name: WEBRTC_LAN_PORT
+              value: "30555"
+          ports:
+            - name: api
+              containerPort: 1984
+            - name: webrtc-tcp
+              containerPort: 8555
+              protocol: TCP
+            - name: webrtc-udp
+              containerPort: 8555
+              protocol: UDP
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: bootstrap
+              mountPath: /go2rtc-entrypoint.sh
+              subPath: go2rtc-entrypoint.sh
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /media/api
+              port: api
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /media/api
+              port: api
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: media-config
+        - name: bootstrap
+          configMap:
+            name: go2rtc-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: media
+  namespace: home-ai-cctv
+spec:
+  selector:
+    app: media
+  ports:
+    - name: api
+      port: 1984
+      targetPort: api
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: media-webrtc
+  namespace: home-ai-cctv
+spec:
+  type: NodePort
+  selector:
+    app: media
+  ports:
+    - name: webrtc-tcp
+      protocol: TCP
+      port: 8555
+      targetPort: webrtc-tcp
+      nodePort: 30555
+    - name: webrtc-udp
+      protocol: UDP
+      port: 8555
+      targetPort: webrtc-udp
+      nodePort: 30555
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp
+  namespace: home-ai-cctv
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp
+  template:
+    metadata:
+      labels:
+        app: mcp
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: mcp
+          image: home-ai-cctv/mcp:0.3.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MCP_PORT
+              value: "3000"
+            - name: SERVER_API_BASE_URL
+              value: http://server:8000
+            - name: AI_API_TOKEN_FILE
+              value: /run/secrets/ai_api_token
+          ports:
+            - name: http
+              containerPort: 3000
+          volumeMounts:
+            - name: ai-secret
+              mountPath: /run/secrets
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: ai-secret
+          secret:
+            secretName: home-ai-cctv-secrets
+            items:
+              - key: ai_api_token
+                path: ai_api_token
+            defaultMode: 0440
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp
+  namespace: home-ai-cctv
+spec:
+  selector:
+    app: mcp
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: home-ai-cctv
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: web
+          image: home-ai-cctv/web:0.3.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: home-ai-cctv
+spec:
+  selector:
+    app: web
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: proxy
+  namespace: home-ai-cctv
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: proxy
+  template:
+    metadata:
+      labels:
+        app: proxy
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: proxy
+          image: caddy:2.9.1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: hooks
+              containerPort: 8081
+          env:
+            - name: CCTV_AI_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: home-ai-cctv-secrets
+                  key: ai_api_token
+          volumeMounts:
+            - name: config
+              mountPath: /etc/caddy/Caddyfile
+              subPath: Caddyfile
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health/live
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: config
+          configMap:
+            name: caddy-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: proxy
+  namespace: home-ai-cctv
+spec:
+  type: NodePort
+  selector:
+    app: proxy
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      nodePort: 30081
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: proxy-hooks
+  namespace: home-ai-cctv
+spec:
+  type: ClusterIP
+  selector:
+    app: proxy
+  ports:
+    - name: hooks
+      port: 8081
+      targetPort: hooks
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: presence-check
+  namespace: home-ai-cctv
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: presence-check
+  template:
+    metadata:
+      labels:
+        app: presence-check
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: presence-check
+          image: home-ai-cctv/presence-check:0.3.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: FACE_CHECK_PORT
+              value: "8000"
+            - name: CAMERA_API_BASE
+              value: http://server:8000
+            - name: AI_API_TOKEN_FILE
+              value: /run/secrets/ai_api_token
+          ports:
+            - name: http
+              containerPort: 8000
+          volumeMounts:
+            - name: ai-secret
+              mountPath: /run/secrets
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 200Mi
+            limits:
+              cpu: "1"
+              memory: 500Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: ai-secret
+          secret:
+            secretName: home-ai-cctv-secrets
+            items:
+              - key: ai_api_token
+                path: ai_api_token
+            defaultMode: 0440
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: presence-check
+  namespace: home-ai-cctv
+spec:
+  type: ClusterIP
+  selector:
+    app: presence-check
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

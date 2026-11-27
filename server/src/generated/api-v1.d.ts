@@ -817,8 +817,11 @@ export interface components {
             id: string;
             /** Format: uuid */
             camera_id: string;
-            /** @enum {string} */
-            type: "motion";
+            /**
+             * @description Движение и подтверждённые бортовые события Tapo C520WS (люди, тампер, зона, линия, смарт-событие).
+             * @enum {string}
+             */
+            type: "motion" | "people" | "tamper" | "intrusion" | "line_cross" | "smart_event";
             /** @enum {string} */
             state: "active" | "inactive";
             /** Format: date-time */

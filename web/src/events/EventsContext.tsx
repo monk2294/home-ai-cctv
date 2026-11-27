@@ -10,6 +10,11 @@ interface EventsContextValue {
   status: SseStatus;
   /** Буфер новых событий из SSE (новые сверху). */
   buffer: CameraEvent[];
+  /**
+   * Последнее событие движения по каждой камере. Не ограничено буфером:
+   * частые события других типов (people) не вытесняют состояние движения.
+   */
+  lastMotionByCamera: Readonly<Record<string, CameraEvent>>;
   /** Растёт после каждого reconnect — экраны перезагружают REST-списки. */
   revision: number;
 }
@@ -24,6 +29,7 @@ export function EventsProvider({ children }: { children: ReactNode }) {
   const authenticated = state.status === 'authenticated';
   const [status, setStatus] = useState<SseStatus>('idle');
   const [buffer, setBuffer] = useState<CameraEvent[]>([]);
+  const [lastMotionByCamera, setLastMotionByCamera] = useState<Record<string, CameraEvent>>({});
   const [revision, setRevision] = useState(0);
   const hadErrorRef = useRef(false);
 
@@ -31,6 +37,7 @@ export function EventsProvider({ children }: { children: ReactNode }) {
     if (!authenticated) {
       setStatus('idle');
       setBuffer([]);
+      setLastMotionByCamera({});
       return;
     }
     setStatus('connecting');
@@ -48,6 +55,9 @@ export function EventsProvider({ children }: { children: ReactNode }) {
       try {
         const event = JSON.parse((message as MessageEvent<string>).data) as CameraEvent;
         setBuffer((prev) => [event, ...prev.filter((e) => e.id !== event.id)].slice(0, BUFFER_LIMIT));
+        if (event.type === 'motion') {
+          setLastMotionByCamera((prev) => ({ ...prev, [event.camera_id]: event }));
+        }
       } catch {
         // повреждённое сообщение пропускаем
       }
@@ -75,7 +85,10 @@ export function EventsProvider({ children }: { children: ReactNode }) {
     };
   }, [authenticated, markAnonymous]);
 
-  const value = useMemo(() => ({ status, buffer, revision }), [status, buffer, revision]);
+  const value = useMemo(
+    () => ({ status, buffer, lastMotionByCamera, revision }),
+    [status, buffer, lastMotionByCamera, revision],
+  );
   return <EventsContext.Provider value={value}>{children}</EventsContext.Provider>;
 }
 

@@ -1,0 +1,48 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: compose-restore
+  namespace: home-ai-cctv
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      containers:
+        - name: restore
+          image: busybox:1.37.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: BACKUP_DIR
+              value: REPLACE_WITH_BACKUP_TIMESTAMP
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eu
+              test -f "/backup/${BACKUP_DIR}/home-ai-cctv.db"
+              test -f "/backup/${BACKUP_DIR}/go2rtc.yaml"
+              cp "/backup/${BACKUP_DIR}/home-ai-cctv.db" /server-data/home-ai-cctv.db
+              cp "/backup/${BACKUP_DIR}/go2rtc.yaml" /media-config/go2rtc.yaml
+              rm -f /server-data/home-ai-cctv.db-wal /server-data/home-ai-cctv.db-shm
+              chown 1000:1000 /server-data/home-ai-cctv.db
+              chmod 600 /server-data/home-ai-cctv.db /media-config/go2rtc.yaml
+          volumeMounts:
+            - name: backup
+              mountPath: /backup
+              readOnly: true
+            - name: server-data
+              mountPath: /server-data
+            - name: media-config
+              mountPath: /media-config
+      volumes:
+        - name: backup
+          hostPath:
+            path: /home/homesv/home-ai-cctv/backups
+            type: Directory
+        - name: server-data
+          persistentVolumeClaim:
+            claimName: server-data
+        - name: media-config
+          persistentVolumeClaim:
+            claimName: media-config

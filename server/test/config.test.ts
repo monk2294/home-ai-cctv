@@ -50,4 +50,49 @@ describe('loadConfig limits', () => {
       assert.throws(() => loadConfig(testEnv({ [name]: value })), new RegExp(name));
     }
   });
+
+  test('MQTT выключен без MQTT_URL и включается с адресом broker', () => {
+    assert.equal(loadConfig(testEnv()).mqtt, null);
+    const config = loadConfig(testEnv({ MQTT_URL: 'mqtt://mqtt.example:1883' }));
+    assert.equal(config.mqtt?.url, 'mqtt://mqtt.example:1883');
+    assert.equal(config.mqtt?.username, undefined);
+    assert.equal(config.mqtt?.password, undefined);
+  });
+
+  test('MQTT принимает username и password из отдельного файла', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'home-ai-cctv-mqtt-'));
+    tempDirs.push(dir);
+    const passwordFile = join(dir, 'mqtt_password');
+    writeFileSync(passwordFile, 'mqtt-secret', { mode: 0o600 });
+    const config = loadConfig(testEnv({
+      MQTT_URL: 'mqtt://mqtt.example:1883',
+      MQTT_USERNAME: 'cctv',
+      MQTT_PASSWORD_FILE: passwordFile,
+    }));
+    assert.equal(config.mqtt?.username, 'cctv');
+    assert.equal(config.mqtt?.password, 'mqtt-secret');
+  });
+
+  test('MQTT отклоняет неполные настройки и URL с userinfo', () => {
+    for (const overrides of [
+      { MQTT_USERNAME: 'cctv' },
+      { MQTT_PASSWORD_FILE: '/tmp/no-file' },
+      { MQTT_URL: 'http://mqtt.example:1883' },
+      { MQTT_URL: 'mqtt://user:pass@mqtt.example:1883' },
+      { MQTT_URL: 'mqtt://user@mqtt.example:1883' },
+    ] as const) {
+      assert.throws(() => loadConfig(testEnv(overrides)), /MQTT/);
+    }
+  });
+
+  test('ошибка MQTT не раскрывает пароль из URL', () => {
+    let caught = '';
+    try {
+      loadConfig(testEnv({ MQTT_URL: 'mqtt://user:supersecret@not a url' }));
+    } catch (error) {
+      caught = error instanceof Error ? error.message : String(error);
+    }
+    assert.match(caught, /MQTT_URL/);
+    assert.ok(!caught.includes('supersecret'), 'пароль не должен попадать в ошибку');
+  });
 });

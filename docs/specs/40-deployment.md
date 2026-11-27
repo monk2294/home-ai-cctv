@@ -81,8 +81,12 @@ config/
 | `MAX_CAMERAS` | Положительный целый лимит камер, по умолчанию 4 |
 | `EVENT_RETENTION_PER_CAMERA` | Положительный целый лимит событий на камеру, по умолчанию 1000 |
 | `HTTP_RATE_LIMIT_PER_MINUTE` | Положительный целый лимит HTTP-запросов на IP в минуту, по умолчанию 1200 |
+| `MQTT_URL` | Опциональный MQTT broker для публикации camera events без userinfo |
+| `MQTT_USERNAME` | Опциональное имя пользователя MQTT |
+| `MQTT_PASSWORD_FILE` | Файл пароля MQTT; задаётся только вместе с `MQTT_USERNAME` |
 | `MEDIA_API_BASE_URL` | Внутренний URL go2rtc |
 | `WEBRTC_LAN_CANDIDATE` | LAN IP сервера для WebRTC |
+| `WEBRTC_LAN_PORT` | Внешний порт WebRTC, по умолчанию 8555; в microk8s — 30555 |
 | `WEBRTC_PUBLIC_CANDIDATE` | Внешний host:port при поддержке tunnel |
 | `STUN_SERVERS` | Необязательный список STUN |
 | `TURN_URL` | Необязательный TURN |
@@ -237,7 +241,22 @@ MVP может предоставлять recovery через локальную
 
 Ротация ключа не входит в MVP. Смена ключа без перешифрования делает сохранённые пароли камер нечитаемыми. Такая операция должна быть запрещена конфигурацией или сопровождаться явной процедурой повторного ввода секретов.
 
-## 13. Критерии готовности deployment
+## 13. microk8s
+
+Манифесты `deploy/microk8s/` разворачивают тот же состав в namespace `home-ai-cctv`.
+
+- Caddy публикуется через NodePort `30081/tcp`.
+- Caddy также слушает `8081` для автоматизаций: отдельный ClusterIP Service `proxy-hooks`. Порт не публикуется на узле. Listener отдаёт только снимок AI API и подставляет токен из Secret; подробности — `docs/specs/30-reverse-proxy.md` §3.1.
+- WebRTC публикуется через отдельный NodePort `30555/tcp+udp`.
+- API go2rtc остаётся доступен только через ClusterIP `media:1984`. NetworkPolicy разрешает обращения к нему только от `server`, `proxy` и kubelet; web не имеет доступа к management API.
+- SQLite использует PVC `server-data`. Рабочий `go2rtc.yaml` использует PVC `media-config`, потому что go2rtc записывает в него streams с учётными данными.
+- `WEBRTC_LAN_PORT=30555` подставляет внешний NodePort в ICE candidate. Внутри контейнера go2rtc слушает `8555`.
+- Секреты монтируются read-only из `home-ai-cctv-secrets`. MCP получает только `ai_api_token`.
+- MQTT-пароль монтируется отдельным Secret `home-ai-cctv-mqtt` как `/run/secrets-mqtt/password`. Server использует учётную запись `home-cctv` и адрес `mosquitto.smart-devices.svc.cluster.local:1883`.
+- Server и media используют стратегию `Recreate`: два экземпляра не должны одновременно писать в RWO PVC или подключаться к одной ONVIF-сессии.
+- Команды первичного запуска и ограничения скриптов находятся в `docs/microk8s.md`.
+
+## 14. Критерии готовности deployment
 
 - Fresh install проходит по документированным шагам.
 - Restart сохраняет камеры и не создаёт дубликаты потоков.

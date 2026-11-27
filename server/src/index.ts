@@ -12,6 +12,7 @@ import { CameraAdapterRegistry } from './cameras/adapter-registry.js';
 import { CameraManager } from './cameras/manager.js';
 import { EventService } from './events/service.js';
 import { SseHub } from './events/sse.js';
+import { MqttCameraEventPublisher } from './events/mqtt.js';
 import { PtzService } from './ptz/service.js';
 import { AiStreamRegistry } from './ai/registry.js';
 import { createMjpegHandler } from './http/routes/mjpeg.js';
@@ -19,12 +20,14 @@ import { AudioCaptureService } from './audio/capture.js';
 import { AudioPlaybackService } from './audio/playback.js';
 
 async function main(): Promise<void> {
-  const config = loadConfig();
-  validateCameraEncryptionKey(config.cameraEncryptionKeyB64);
-
-  const handle = createDb(config.databasePath);
-  let migrationsDone = false;
+  let openedHandle: ReturnType<typeof createDb> | null = null;
   try {
+    const config = loadConfig();
+    validateCameraEncryptionKey(config.cameraEncryptionKeyB64);
+
+    const handle = createDb(config.databasePath);
+    openedHandle = handle;
+    let migrationsDone = false;
     runMigrations(handle.db);
     migrationsDone = true;
 
@@ -42,6 +45,11 @@ async function main(): Promise<void> {
 
     const onvif = new LibOnvifAdapter();
     const adapters = new CameraAdapterRegistry([new TapoC520wsAdapter(onvif), onvif]);
+    const mqttPublisher = config.mqtt
+      ? MqttCameraEventPublisher.connect(config.mqtt, {
+          warn: (message: string, ...args: unknown[]) => console.warn(message, ...args),
+        })
+      : null;
     const manager = new CameraManager(
       handle,
       adapters,
@@ -51,6 +59,7 @@ async function main(): Promise<void> {
       ptz,
       cameraKey,
       config.maxCameras,
+      (event) => mqttPublisher?.publish(event),
     );
     const openMjpeg = createMjpegHandler(manager, mediaClient, registry);
     const audioCapture = new AudioCaptureService(manager);
@@ -80,15 +89,23 @@ async function main(): Promise<void> {
       app.log.warn({ err: error }, 'Reconciliation завершился с ошибками');
     });
     manager.startProbeJanitor();
+    const reconcileTimer = setInterval(() => {
+      void manager.reconcileOffline().catch((error: unknown) => {
+        app.log.warn({ err: error }, 'Повторный Reconciliation завершился с ошибкой');
+      });
+    }, 15_000);
+    reconcileTimer.unref();
 
     const shutdown = async (signal: string) => {
       app.log.info({ signal }, 'Остановка сервера');
       clearInterval(purgeTimer);
+      clearInterval(reconcileTimer);
       await ptz.shutdown((cameraId) => manager.runtimeSession(cameraId));
       await registry.shutdown();
       audioCapture.shutdown();
       audioPlayback.shutdown();
       await manager.shutdown();
+      await mqttPublisher?.close();
       await app.close();
       handle.close();
       process.exit(0);
@@ -100,7 +117,7 @@ async function main(): Promise<void> {
     app.log.info({ host: config.host, port: config.port }, 'Сервер запущен');
   } catch (error) {
     console.error('Не удалось запустить сервер:', error instanceof Error ? error.message : error);
-    handle.close();
+    openedHandle?.close();
     process.exit(1);
   }
 }
